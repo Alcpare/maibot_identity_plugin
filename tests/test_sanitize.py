@@ -34,7 +34,7 @@ for c in cases:
 
 print()
 print("=== 群号 / QQ / 会话 遮蔽 ===")
-for v in ("1038013878", "1021044974", "1373558257", "2daf0ecf5ea769b4356688c440e6b757"):
+for v in ("900000003", "900000002", "100000001", "2daf0ecf5ea769b4356688c440e6b757"):
     print(f"   {v:34} → {p._mask_id(v)}")
 
 print()
@@ -47,7 +47,7 @@ print(f"   17 类结构符号（含弯引号/书名号/星号/下划线）全部
 assert "\n" not in p._sanitize_name("甲\n乙")
 assert len(p._sanitize_name("Ｘ" * 40)) <= 25
 assert p._sanitize_name("") == "某人"
-for v in ("1038013878", "1373558257"):
+for v in ("900000003", "100000001"):
     assert v not in p._mask_id(v), f"群号/QQ 未遮蔽: {v}"
 print("   长度上限 / 空值兜底 / 群号遮蔽 ✓")
 print()

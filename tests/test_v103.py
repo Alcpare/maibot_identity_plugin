@@ -48,7 +48,7 @@ class TestPlugin(m.IdentityPlugin):
         return self._cfg
 
 
-def make_plugin(tmpdir, roster="1373558257 = 主人", default_label="群友"):
+def make_plugin(tmpdir, roster="100000001 = 主人", default_label="群友"):
     p = TestPlugin.__new__(TestPlugin)
     p._ctx = _Ctx(tmpdir)
     cfg = m.IdentityPluginConfig()
@@ -95,8 +95,8 @@ with tempfile.TemporaryDirectory() as td:
     now = time.time()
     (pathlib.Path(td) / "speakers.json").write_text(json.dumps({
         "version": 1, "updated": now,
-        "recent": {"good1": {"user_id": "1373558257", "name": "Alcpare", "session": "s1", "ts": now - 10}},
-        "latest": {"s1": {"user_id": "1373558257", "name": "Alcpare", "session": "s1", "ts": now - 10}},
+        "recent": {"good1": {"user_id": "100000001", "name": "Alcpare", "session": "s1", "ts": now - 10}},
+        "latest": {"s1": {"user_id": "100000001", "name": "Alcpare", "session": "s1", "ts": now - 10}},
     }), encoding="utf-8")
     p = make_plugin(td)
     p._rebuild_roster()
@@ -119,7 +119,7 @@ with tempfile.TemporaryDirectory() as td:
     p = make_plugin(td, default_label="朋友")
     p._rebuild_roster()
     print("   default_label='朋友'   → 档位", p._label_for("999999999")[0], "✓（合法值照常生效）")
-    print("   名单内仍按名单走       → 档位", p._label_for("1373558257")[0], "✓")
+    print("   名单内仍按名单走       → 档位", p._label_for("100000001")[0], "✓")
 
 print()
 print("✅ v1.0.3 专项验证通过")
