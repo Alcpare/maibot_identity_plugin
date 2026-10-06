@@ -1,0 +1,17 @@
+# 运行时生成的用户配置（含个人隐私，绝不能进仓库）
+/config.toml
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 插件运行期数据（正常在 data/plugins/<id>/，这里只是防御性排除）
+speakers.json
+*.log
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
