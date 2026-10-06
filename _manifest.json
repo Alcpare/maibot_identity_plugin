@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "name": "身份认知",
   "description": "手动白名单：让她知道当前对话者是主人 / 朋友 / 普通群友，从而用对态度。QQ 号只用于内部识别，永不进入提示词。",
   "author": {
