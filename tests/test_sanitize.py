@@ -34,7 +34,7 @@ for c in cases:
 
 print()
 print("=== 群号 / QQ / 会话 遮蔽 ===")
-for v in ("900000003", "900000002", "100000001", "2daf0ecf5ea769b4356688c440e6b757"):
+for v in ("900000003", "900000002", "100000001", "0123456789abcdef0123456789abcdef"):
     print(f"   {v:34} → {p._mask_id(v)}")
 
 print()
