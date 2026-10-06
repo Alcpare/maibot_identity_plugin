@@ -56,7 +56,7 @@ print("\n=== ① 名单解析（含注释/空行/坏行/中文标点）===")
 plug.config.identity.roster = (
     "# 注释行\n"
     "\n"
-    "100000001 = 主人   # 航欣/Alcpare\n"
+    "100000001 = 主人   # Alcpare\n"
     "100000004 ＝ 朋友\n"          # 全角等号
     "100000006, 朋友\n"            # 逗号分隔
     "111111 = 陌生人\n"             # 非法档位 → 跳过
@@ -349,7 +349,7 @@ print("  ✅ 已删除 4 个冗余项，保留 9 项（其中 3 项是三档文�
 print("\n=== ⑭ 瑕疵修复：说话者已是群友档时不再重复那一行 ===")
 plug._cfg = m.IdentityPluginConfig()
 plug._recent = {}
-_sp_member = {"user_id": "999", "name": "滑稽", "session": "g1", "group": "123"}
+_sp_member = {"user_id": "999", "name": "某群友", "session": "g1", "group": "123"}
 _sp_owner = {"user_id": "100000001", "name": "Alcpare", "session": "g1", "group": "123"}
 _n_member = plug._render_note(_sp_member, "群友")
 _n_owner = plug._render_note(_sp_owner, "主人")
