@@ -54,6 +54,19 @@ _ALIAS_HASH_LENGTH = 6
 _LONG_DIGITS_RE = re.compile(r"\d{5,}")
 """长数字自检：注入文本中出现 5 位以上连续数字就拒绝注入。"""
 
+def _safe_ts(record: Any) -> float:
+    """尽力取出记录时间戳；缺失或类型不对返回 0.0，**绝不抛异常**。
+
+    ``speakers.json`` 只是兜底数据：被写坏或手改过（``ts`` 不是数字）时
+    绝不能让插件加载失败 —— 否则一个"坏了就当没有"的兜底文件会变成启动炸弹。
+    """
+
+    try:
+        return float(record.get("ts") or 0) if isinstance(record, dict) else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
 _DEFAULT_LABEL = "群友"
 
 _NOTE_MARKER = "【内部参考"
@@ -274,12 +287,25 @@ class IdentityPlugin(MaiBotPlugin):
         self._labels = labels
 
     def _label_for(self, user_id: str) -> Tuple[str, bool]:
-        """返回 (档位, 是否命中名单)。"""
+        """返回 (档位, 是否命中名单)。
+
+        名单外的档位取配置里的 ``default_label``，但**必须先校验**：
+        这个字符串会原样进入提示词（``（你的{label}）``），
+        填了「群主」这类未支持的档位时要回落成默认档，而不是把无效值写进提示词。
+        """
 
         label = self._labels.get(str(user_id))
         if label:
             return label, True
-        return str(self.config.identity.default_label or _DEFAULT_LABEL), False
+        default = str(self.config.identity.default_label or "").strip()
+        if default not in _LABEL_RULES:
+            if default and not getattr(self, "_default_label_warned", False):
+                self._default_label_warned = True
+                self.ctx.logger.warning(
+                    f"[身份] default_label「{default}」不是支持的档位（{'/'.join(_LABEL_RULES)}），已回落为「{_DEFAULT_LABEL}」"
+                )
+            default = _DEFAULT_LABEL
+        return default, False
 
     def _style_for(self, label: str) -> str:
         """按档位取「态度 + 关心程度」文案（来自配置，可在面板里改）。"""
@@ -451,14 +477,18 @@ class IdentityPlugin(MaiBotPlugin):
         now = time.time()
         recent = payload.get("recent") if isinstance(payload, dict) else None
         latest = payload.get("latest") if isinstance(payload, dict) else None
-        if isinstance(recent, dict):
-            for key, record in recent.items():
-                if isinstance(record, dict) and now - float(record.get("ts") or 0) <= _RECENT_TTL:
-                    self._recent[str(key)] = record
-        if isinstance(latest, dict):
-            for key, record in latest.items():
-                if isinstance(record, dict) and now - float(record.get("ts") or 0) <= _RECENT_TTL:
-                    self._latest_by_session[str(key)] = record
+        try:
+            if isinstance(recent, dict):
+                for key, record in recent.items():
+                    if isinstance(record, dict) and now - _safe_ts(record) <= _RECENT_TTL:
+                        self._recent[str(key)] = record
+            if isinstance(latest, dict):
+                for key, record in latest.items():
+                    if isinstance(record, dict) and now - _safe_ts(record) <= _RECENT_TTL:
+                        self._latest_by_session[str(key)] = record
+        except Exception as exc:  # noqa: BLE001
+            # 兜底数据再坏也不能让插件加载失败（"坏了就当没有"）
+            self.ctx.logger.warning(f"[身份] 映射恢复中断，已忽略剩余内容: {type(exc).__name__}: {exc}")
 
     def _save_persisted(self, force: bool = False) -> None:
         """把映射原子落盘；默认节流（最多每 10 秒一次）。"""
@@ -470,7 +500,7 @@ class IdentityPlugin(MaiBotPlugin):
         if path is None:
             return
         try:
-            recent_items = sorted(self._recent.items(), key=lambda kv: float(kv[1].get("ts") or 0))
+            recent_items = sorted(self._recent.items(), key=lambda kv: _safe_ts(kv[1]))
             payload = {
                 "version": 1,
                 "updated": now,
