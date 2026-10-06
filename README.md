@@ -104,23 +104,63 @@ roster = """
   `maisaka.replyer.before_model_request`。**实测环境：MaiBot 1.3.4 / SDK 2.9.0**；
   manifest 里的兼容区间按实测收紧为 `host >= 1.3.4`、`sdk >= 2.9.0`。
 
+### 三个钩子都是 SDK 正式内置 Hook
+
+依据官方文档 [Hook 处理器 · 内置 Hook 清单](https://docs.mai-mai.org/plugin/hooks)：
+
+| 钩子 | 文档描述 | abort | 改参 |
+|---|---|---|---|
+| `chat.receive.before_process` | 入站消息执行 `SessionMessage.process()` 前 | ✅ | ✅ |
+| `maisaka.planner.before_request` | Maisaka 规划器请求模型前 | ❌ | ✅ |
+| `maisaka.replyer.before_model_request` | replyer 构造完最终 `messages` 后、请求模型前 | ❌ | ✅ |
+
+两点补充说明：
+- 后两个钩子**不允许 abort**，所以本插件全部使用 `error_policy=ErrorPolicy.SKIP`（用 `ABORT` 会被 Host 拒绝注册）。
+- 文档写明：**传入未注册的 Hook 名称会导致插件注册失败**。本插件在真实 MaiBot 1.3.4 上加载成功，
+  即这三个名字都已被 Host 注册（不是私有/实验入口）；插件市场里已收录的 `TAIY2020.smart_poke_plugin`
+  与 `maibot-community.mai-repeater` 也在使用同一批钩子。
+
+---
+
+## 自测
+
+仓库 `tests/` 下是离线自测（不需要跑起麦麦，用替身对象直接调插件方法）：
+
+```bash
+python tests/test_identity_plugin.py   # 主自测 16 节：名单解析 / 说话者定位 / 渲染 / 去重 / 通知过滤 / 持久化 / 遮蔽净化
+python tests/test_sanitize.py          # 显示名加固：17 类结构符号 + 长度上限 + 空值兜底 + 号码遮蔽
+python tests/test_v103.py              # 兜底文件损坏不炸 + default_label 校验
+```
+
+三个脚本都以 `__file__` 定位插件目录，克隆到任何位置都能跑 ✓
+
 ---
 
 ## 隐私与落盘（磁盘上留了什么）
 
 | 位置 | 内容 | 说明 |
 |---|---|---|
-| `data/plugins/Alcpare.identity/speakers.json` | **明文**的 `msg_id → {user_id, 显示名, 会话, 时间}` 映射 | 仅用于"重启后仍能定位被延迟处理的消息"。**不含任何消息内容**；TTL 6 小时、最多 2000 条；原子写入（先写临时文件再 `os.replace`） |
-| 日志 | 只记**遮蔽后**的号码（如 `137***257`）与显示名 | 号码不落日志，避免日志被贴出时泄露身份名单 |
+| `data/plugins/Alcpare.identity/speakers.json` | **明文**的 `msg_id → {user_id, 显示名, 会话, group（群号）, 时间}` 映射 | 仅用于"重启后仍能定位被延迟处理的消息"。**不含任何消息内容**；TTL 6 小时、最多 2000 条；原子写入（先写临时文件再 `os.replace`）。文件被写坏或手改过时会被整体忽略，不会影响插件加载 |
+| 日志 | QQ / 会话 ID / 群号都只记**遮蔽后**的形式（如 `137***257`）与显示名 | 号码不落日志，避免日志被贴出时泄露身份名单 |
 
 **不写宿主数据库、不碰宿主配置、不删除任何文件** ✓
-**QQ 号永不进入提示词** ✓ —— 但请注意：这是"提示词层面"的保证，磁盘上仍有上面那份明文映射 ✓
+**QQ 号永不进入提示词** ✓ —— 但请注意：这是"提示词层面"的保证，**磁盘上仍有上面那份明文映射（含明文群号）** ✓
 
 配置文件 `config.toml` 含有你的名单（真号码），**已被 `.gitignore` 排除**，不会随插件进仓库 ✓
 
 ---
 
 ## 更新日志
+
+### v1.0.3
+- **修复启动炸弹**：`_load_persisted` 里把 `ts` 转 float 的语句在 try 之外 —— `speakers.json` 被写坏或手改过
+  （`ts` 不是数字）时会让 `on_load` 抛异常、**插件直接加载失败**。一个"坏了就当没有"的兜底文件不该有这种后果：
+  现在整段恢复逻辑都在保护里，时间戳解析失败一律按"无记录"处理（新增 `_safe_ts`），写入路径同样加固。
+- **`default_label` 加校验**：填了「群主」这类未支持的档位时，此前档位文案会静默回落、但 `（你的{label}）`
+  里的无效值仍会原样进入提示词。现在会回落到默认档并记一条 WARNING。
+- **README 补齐**：落盘表格补上 `group`（明文群号）；新增「三个钩子都是 SDK 正式内置 Hook」的依据
+  （官方文档 + Host 校验规则 + 同批钩子已被市场插件使用）。
+- **仓库纳入自测**：`tests/` 下三个离线自测脚本（用 `__file__` 定位插件目录，克隆即可跑）。
 
 ### v1.0.2
 - **显示名过滤改为「按 Unicode 类别」剔除**：任何文字的括号、引号、符号与控制字符一律剔除
