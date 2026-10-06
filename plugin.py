@@ -25,6 +25,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -61,12 +62,24 @@ _NOTE_MARKER = "【内部参考"
 _NAME_MAX_LEN = 24
 """显示名长度上限（防止超长群名片把注入文本撑爆）。"""
 
-_NAME_STRIP_RE = re.compile(r"[\r\n\t\x00-\x1f\x7f【】\[\]{}<>|`]")
-"""从显示名里剔除换行、控制字符与结构标记符号。
+_NAME_DROP_CATEGORIES = frozenset(
+    {
+        "Cc",  # 控制字符（换行/制表等）
+        "Cf",  # 格式字符（零宽/RTL 覆盖等）
+        "Ps", "Pe",  # 任何文字的开/闭括号（半角、全角、书名号、方括号…）
+        "Pi", "Pf",  # 各类弯引号
+        "Sm", "Sk", "Sc",  # 数学/修饰/货币符号（| ~ ^ = $ 等）
+        "Pc",  # 连接符（下划线等）
+    }
+)
+_NAME_DROP_CHARS = frozenset("'\"*")
+"""额外剔除的直引号与星号（它们的 Unicode 类别是普通标点，需单独列）。
 
 现实威胁：群名片是**用户可控**的，恶意群友可以把它写成指令文本，
 跟着我们的系统项一起进入模型上下文（「5 位以上数字」自检拦不住这种）。
-这里做长度上限 + 结构字符过滤，把注入面压到最小。
+括号类字符必须**全部**剔除 —— 枚举式黑名单一定会漏（实测就漏了全角 `（）`），
+所以这里按 Unicode 类别过滤：任何文字的括号、引号、符号都进不来。
+再叠加长度上限，把注入面压到最小。
 """
 
 _INJECT_DEDUPE_TTL = 900.0
@@ -300,9 +313,13 @@ class IdentityPlugin(MaiBotPlugin):
 
     @staticmethod
     def _sanitize_name(value: Any) -> str:
-        """规范化显示名：去控制字符/结构符号 → 压缩空白 → 截断 → 兜底「某人」。"""
+        """规范化显示名：按 Unicode 类别剔除括号/引号/符号与控制字符 → 截断 → 兜底「某人」。"""
 
-        text = _NAME_STRIP_RE.sub("", str(value or ""))
+        text = "".join(
+            ch
+            for ch in str(value or "")
+            if ch not in _NAME_DROP_CHARS and unicodedata.category(ch) not in _NAME_DROP_CATEGORIES
+        )
         text = re.sub(r"\s{2,}", " ", text).strip()
         if len(text) > _NAME_MAX_LEN:
             text = text[:_NAME_MAX_LEN] + "…"
@@ -382,7 +399,8 @@ class IdentityPlugin(MaiBotPlugin):
             self.ctx.logger.debug(
                 f"[身份] 入口记录: msg_id={message_id}(alias={alias}) "
                 f"user_id={self._mask_id(user_id)} "
-                f"session={self._mask_id(session_id)} group={group_info.get('group_id') or '(私聊)'}"
+                f"session={self._mask_id(session_id)} "
+                f"group={self._mask_id(group_info.get('group_id')) if group_info.get('group_id') else '(私聊)'}"
             )
         except Exception as exc:  # noqa: BLE001 - 记账失败绝不能影响消息处理
             self.ctx.logger.warning(f"[身份] 入口记录失败（已忽略，不影响收发）: {type(exc).__name__}: {exc}")
