@@ -1,0 +1,28 @@
+{
+  "schema_version": 2,
+  "required_capabilities": ["custom_pages"],
+  "workspace_title": "身份认知",
+  "pages": [
+    {
+      "id": "identity",
+      "title": "身份认知",
+      "description": "给每个人单独设定身份档位和关心频率",
+      "placement": "workspace",
+      "icon": "settings",
+      "mode": "custom",
+      "entry": "webui/identity.html",
+      "queries": {
+        "load": { "api": "identity_load", "version": "1" }
+      },
+      "actions": {
+        "save": {
+          "api": "identity_save",
+          "version": "1",
+          "parameters": {
+            "data": { "type": "string", "required": true, "max_length": 4000 }
+          }
+        }
+      }
+    }
+  ]
+}

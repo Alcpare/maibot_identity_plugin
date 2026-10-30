@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>身份认知</title>
+<style>
+  :root {
+    --bg: #1a1614; --card: #221d1a; --border: #3a322c;
+    --text: #e8e0d8; --muted: #9a8d80; --accent: #d4693a;
+    --accent-dim: #8a4429; --danger: #c0453a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.6;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 6px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 14px;
+  }
+  .row { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  .field { margin-bottom: 12px; }
+  .field:last-child { margin-bottom: 0; }
+  label {
+    display: block; font-size: 12px; color: var(--muted);
+    margin-bottom: 5px; letter-spacing: .3px;
+  }
+  input[type="text"] {
+    width: 100%; background: #17130f; border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); padding: 8px 10px;
+    font-size: 14px; font-family: inherit; outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--accent-dim); }
+  textarea {
+    width: 100%; min-height: 62px; background: #17130f;
+    border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+    padding: 8px 10px; font-size: 13px; font-family: inherit;
+    line-height: 1.55; resize: vertical; outline: none;
+  }
+  textarea:focus { border-color: var(--accent-dim); }
+
+  .slider-block { flex: 1 1 260px; }
+  .slider-head {
+    display: flex; justify-content: space-between;
+    align-items: baseline; margin-bottom: 2px;
+  }
+  .slider-value {
+    font-size: 13px; color: var(--accent); font-weight: 600;
+    min-width: 34px; text-align: right;
+  }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 6px;
+    border-radius: 3px; background: #3a322c; outline: none; margin: 10px 0 6px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 18px; height: 18px;
+    border-radius: 50%; background: var(--accent);
+    border: 2px solid #2a211c; cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); border: 2px solid #2a211c; cursor: pointer;
+  }
+  .slider-ticks {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--muted); padding: 0 2px;
+  }
+  .slider-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .entry { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
+  .entry:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+  .entry-head {
+    display: flex; justify-content: space-between;
+    align-items: center; margin-bottom: 10px;
+  }
+  .entry-idx { font-size: 12px; color: var(--muted); }
+
+  select {
+    background: #17130f; border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); padding: 8px 10px;
+    font-size: 14px; font-family: inherit; outline: none; min-width: 110px;
+  }
+  button {
+    background: var(--accent); border: none; border-radius: 6px;
+    color: #fff; padding: 9px 18px; font-size: 13px;
+    font-family: inherit; cursor: pointer; font-weight: 500;
+  }
+  button:hover { background: #e07a4a; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); padding: 7px 14px;
+  }
+  button.ghost:hover {
+    border-color: var(--accent-dim); color: var(--text); background: transparent;
+  }
+  button.del {
+    background: transparent; border: none; color: var(--danger);
+    font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px;
+  }
+  button.del:hover { color: #ff6b5a; background: transparent; }
+
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
+  .msg { font-size: 12px; margin-left: auto; }
+  .msg.ok { color: #6fbf73; }
+  .msg.err { color: var(--danger); }
+
+  .section-title {
+    font-size: 13px; color: var(--muted); letter-spacing: .3px;
+    margin: 0 0 12px; text-transform: uppercase;
+  }
+  .care-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 640px) { .care-grid { grid-template-columns: 1fr; } }
+
+  .loading { color: var(--muted); text-align: center; padding: 40px 0; }
+  .level-tag {
+    display: inline-block; font-size: 11px; padding: 1px 7px;
+    border-radius: 4px; background: var(--accent-dim);
+    color: #f0d8c8; margin-left: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>身份认知</h1>
+  <div class="sub">给每个人单独设定身份和关心频率；没列出来的人自动按「群友」处理。</div>
+  <div id="app"><div class="loading">加载中…</div></div>
+</div>
+
+<script>
+(function () {
+  var LEVELS = [
+    { value: 1, name: "不提", desc: "完全不主动关心" },
+    { value: 2, name: "偶尔", desc: "偶尔提一句" },
+    { value: 3, name: "正常", desc: "自然关心" },
+    { value: 4, name: "经常", desc: "可以多关心几句" }
+  ];
+  var LABELS = ["主人", "朋友", "群友"];
+
+  var state = null;
+  var dirty = false;
+
+  // 宿主注入的 SDK：window.maibot.query / action
+  // 注意：页面 CSP 是 connect-src 'none'，不能用 fetch，只能走 SDK 端口
+  var api = {
+    load: function () { return window.maibot.query("load", {}); },
+    save: function (data) {
+      return window.maibot.action("save", { data: JSON.stringify(data) });
+    }
+  };
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function levelName(v) {
+    for (var i = 0; i < LEVELS.length; i++) {
+      if (LEVELS[i].value === Number(v)) return LEVELS[i].name;
+    }
+    return "正常";
+  }
+
+  function renderEntry(e, i) {
+    var lv = Number(e.care_level) || 3;
+    var opts = LABELS.map(function (l) {
+      return '<option value="' + l + '"' + (e.label === l ? " selected" : "") + ">" + l + "</option>";
+    }).join("");
+    var ticks = LEVELS.map(function (l) { return "<span>" + l.name + "</span>"; }).join("");
+    return ''
+      + '<div class="entry" data-idx="' + i + '">'
+      +   '<div class="entry-head">'
+      +     '<span class="entry-idx">#' + (i + 1) + "</span>"
+      +     '<button class="del" data-act="del" data-idx="' + i + '" title="删除">×</button>'
+      +   "</div>"
+      +   '<div class="row">'
+      +     '<div class="field" style="flex:1 1 180px;">'
+      +       "<label>QQ 号</label>"
+      +       '<input type="text" data-act="id" data-idx="' + i + '" value="'
+      +       esc(e.user_id) + '" placeholder="例如 100000001">'
+      +     "</div>"
+      +     '<div class="field" style="flex:0 0 auto;">'
+      +       "<label>身份</label>"
+      +       '<select data-act="label" data-idx="' + i + '">' + opts + "</select>"
+      +     "</div>"
+      +   "</div>"
+      +   '<div class="field slider-block">'
+      +     '<div class="slider-head">'
+      +       '<label style="margin:0;">关心频率<span class="level-tag">' + levelName(lv) + "</span></label>"
+      +       '<span class="slider-value">' + lv + "</span>"
+      +     "</div>"
+      +     '<input type="range" min="1" max="4" step="1" value="' + lv + '"'
+      +       ' data-act="care" data-idx="' + i + '">'
+      +     '<div class="slider-ticks">' + ticks + "</div>"
+      +   "</div>"
+      + "</div>";
+  }
+
+  function renderCareTexts(care) {
+    return LEVELS.map(function (l) {
+      return '<div class="field">'
+        + "<label>「" + l.name + "」档的措辞</label>"
+        + '<textarea data-care="' + l.value + '">' + esc(care[l.value] || "") + "</textarea>"
+        + "</div>";
+    }).join("");
+  }
+
+  var STYLE_ROWS = [
+    { key: "owner_style", name: "主人", hint: "最亲近的那个人" },
+    { key: "friend_style", name: "朋友", hint: "聊得挺多的熟人" },
+    { key: "member_style", name: "群友", hint: "名单外的人默认按这档" }
+  ];
+
+  function renderStyles(styles) {
+    return STYLE_ROWS.map(function (row) {
+      return '<div class="field">'
+        + '<label>' + row.name + '档的提示词'
+        + '<span style="color:var(--muted);font-weight:400;margin-left:8px;">（' + row.hint + '）</span></label>'
+        + '<textarea data-style="' + row.key + '" style="min-height:80px;">'
+        + esc(styles[row.key] || "") + "</textarea>"
+        + "</div>";
+    }).join("");
+  }
+
+  function render() {
+    var app = document.getElementById("app");
+    if (!state) { app.innerHTML = '<div class="loading">加载失败</div>'; return; }
+
+    var entries = (state.roster || []).map(renderEntry).join("");
+    var empty = (state.roster || []).length === 0
+      ? '<div style="color:var(--muted);font-size:13px;padding:8px 0;">还没有人，点下面「添加一个人」</div>'
+      : "";
+    var defOpts = LABELS.map(function (l) {
+      return '<option value="' + l + '"' + (state.default_label === l ? " selected" : "") + ">" + l + "</option>";
+    }).join("");
+
+    app.innerHTML = ''
+      + '<div class="card">'
+      +   '<div class="section-title">身份名单</div>'
+      +   entries + empty
+      +   '<div style="margin-top:14px;">'
+      +     '<button class="ghost" data-act="add">+ 添加一个人</button>'
+      +   "</div>"
+      + "</div>"
+      + '<div class="card">'
+      +   '<div class="section-title">各档身份提示词（这个档位的人看到的说话方式）</div>'
+      +   renderStyles(state.styles || {})
+      +   '<div class="slider-hint">这段决定「这个档位的人」怎么跟她说话；修改后立即对这个档位生效。</div>'
+      + "</div>"
+      + '<div class="card">'
+      +   '<div class="section-title">各档关心措辞（滑块选到该档时注入）</div>'
+      +   '<div class="care-grid">' + renderCareTexts(state.care_texts || {}) + "</div>"
+      +   '<div class="slider-hint">每档具体说什么由这里决定；滑块只负责选哪一档。</div>'
+      + "</div>"
+      + '<div class="card">'
+      +   '<div class="section-title">其他</div>'
+      +   '<div class="field">'
+      +     "<label>名单外的人按哪一档对待</label>"
+      +     '<select data-act="default_label">' + defOpts + "</select>"
+      +   "</div>"
+      +   '<div class="field">'
+      +     '<label><input type="checkbox" data-act="inject_for_others"'
+      +       (state.inject_for_others ? " checked" : "")
+      +       ' style="width:auto;margin-right:6px;vertical-align:-2px;">'
+      +     "对名单外的人也注入身份（关闭更省 token）</label>"
+      +   "</div>"
+      + "</div>"
+      + '<div class="toolbar">'
+      +   '<button data-act="save">保存</button>'
+      +   '<button class="ghost" data-act="reload">重新加载</button>'
+      +   '<span class="msg" id="msg"></span>'
+      + "</div>";
+    bind();
+  }
+
+  function bind() {
+    document.querySelectorAll("[data-act]").forEach(function (el) {
+      var act = el.getAttribute("data-act");
+
+      if (act === "add") {
+        el.onclick = function () {
+          state.roster = state.roster || [];
+          state.roster.push({ user_id: "", label: "朋友", care_level: 3 });
+          dirty = true;
+          render();
+        };
+      } else if (act === "save") {
+        el.onclick = function () {
+          var btn = el;
+          btn.disabled = true;
+          setMsg("保存中…", "");
+          collect();
+          api.save({
+            roster: state.roster,
+            care_texts: state.care_texts,
+            styles: state.styles || {},
+            default_label: state.default_label,
+            inject_for_others: state.inject_for_others
+          }).then(function () {
+            dirty = false;
+            setMsg("已保存", "ok");
+          }).catch(function (err) {
+            setMsg("保存失败：" + err.message, "err");
+          }).then(function () {
+            btn.disabled = false;
+          });
+        };
+      } else if (act === "reload") {
+        el.onclick = function () { load(true); };
+      } else if (act === "del") {
+        el.onclick = function () {
+          var i = Number(el.getAttribute("data-idx"));
+          state.roster.splice(i, 1);
+          dirty = true;
+          render();
+        };
+      } else if (act === "care") {
+        el.oninput = function () {
+          var i = Number(el.getAttribute("data-idx"));
+          var v = Number(el.value);
+          state.roster[i].care_level = v;
+          dirty = true;
+          var block = el.closest(".entry");
+          block.querySelector(".slider-value").textContent = v;
+          block.querySelector(".level-tag").textContent = levelName(v);
+        };
+      } else if (act === "id") {
+        el.oninput = function () {
+          var i = Number(el.getAttribute("data-idx"));
+          state.roster[i].user_id = el.value.trim();
+          dirty = true;
+        };
+      } else if (act === "label") {
+        el.onchange = function () {
+          var i = Number(el.getAttribute("data-idx"));
+          state.roster[i].label = el.value;
+          dirty = true;
+        };
+      } else if (act === "default_label") {
+        el.onchange = function () { state.default_label = el.value; dirty = true; };
+      } else if (act === "inject_for_others") {
+        el.onchange = function () { state.inject_for_others = el.checked; dirty = true; };
+      }
+    });
+
+    document.querySelectorAll("[data-care]").forEach(function (el) {
+      el.oninput = function () {
+        state.care_texts[el.getAttribute("data-care")] = el.value;
+        dirty = true;
+      };
+    });
+
+    document.querySelectorAll("textarea[data-style]").forEach(function (el) {
+      el.oninput = function () {
+        state.styles = state.styles || {};
+        state.styles[el.getAttribute("data-style")] = el.value;
+        dirty = true;
+      };
+    });
+  }
+
+  function collect() {
+    state.roster = (state.roster || []).filter(function (e) {
+      return String(e.user_id || "").trim();
+    });
+  }
+
+  function setMsg(text, cls) {
+    var m = document.getElementById("msg");
+    if (!m) return;
+    m.textContent = text;
+    m.className = "msg " + (cls || "");
+  }
+
+  function load(force) {
+    if (dirty && !force) return;
+    setMsg("加载中…", "");
+    window.maibot.ready.then(function () {
+      return api.load();
+    }).then(function (data) {
+      state = data || {};
+      state.roster = state.roster || [];
+      state.care_texts = state.care_texts || {};
+      state.styles = state.styles || {};
+      dirty = false;
+      render();
+      setMsg("", "");
+    }).catch(function (err) {
+      document.getElementById("app").innerHTML =
+        '<div class="loading">加载失败：' + esc(err.message) + "</div>";
+    });
+  }
+
+  window.addEventListener("beforeunload", function (e) {
+    if (dirty) { e.preventDefault(); e.returnValue = ""; }
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>
