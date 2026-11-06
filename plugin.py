@@ -256,6 +256,14 @@ class IdentitySectionConfig(PluginConfigBase):
         default=_DEFAULT_LABEL,
         description="名单外的人按哪一档对待（一般保持「群友」）",
     )
+    custom_styles: Dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "自定义档位：档位名 → 提示词。可用在名单里，也会出现在默认档位的候选里。"
+            "内置的「主人/朋友/群友」不需要写在这里。"
+        ),
+        json_schema_extra={"x-widget": "kv"},
+    )
 
     # ── 3. 开关（默认值就是推荐值，通常不用动）─────────────────────
     inject_to_planner: bool = Field(default=True, description="在她决定要不要回之前注入（建议开）")
@@ -382,6 +390,7 @@ class IdentityPlugin(MaiBotPlugin):
                 "friend_style": str(cfg.friend_style or ""),
                 "member_style": str(cfg.member_style or ""),
             },
+            "custom_styles": dict(self._custom_styles()),
             "default_label": str(cfg.default_label or "群友"),
             "inject_for_others": bool(cfg.inject_for_others),
         }
@@ -397,7 +406,7 @@ class IdentityPlugin(MaiBotPlugin):
         for item in raw_roster:
             qq = re.sub(r"\D", "", str(item.get("user_id") or ""))
             label = str(item.get("label") or "朋友")
-            if label not in _LABEL_RULES:
+            if label not in self._valid_labels():
                 label = "朋友"
             try:
                 level = int(item.get("care_level") or 3)
@@ -413,7 +422,7 @@ class IdentityPlugin(MaiBotPlugin):
                 care_texts[key] = str(payload["care_texts"][key] or "")
 
         default_label = payload.get("default_label")
-        if default_label not in _LABEL_RULES:
+        if default_label not in self._valid_labels():
             default_label = "群友"
 
         style_payload = payload.get("styles") or {}
@@ -422,10 +431,22 @@ class IdentityPlugin(MaiBotPlugin):
             if key in style_payload:
                 styles[key] = str(style_payload[key] or "")
 
+        # 自定义档位：档位名 → 提示词
+        custom_styles = {}
+        raw_custom = payload.get("custom_styles") or {}
+        if isinstance(raw_custom, dict):
+            for name, prompt in raw_custom.items():
+                n = str(name or "").strip()
+                ptext = str(prompt or "").strip()
+                # 不允许覆盖内置三档，也不允许空名/空值
+                if n and ptext and n not in _LABEL_RULES and len(n) <= 16:
+                    custom_styles[n] = ptext
+
         record = {
             "roster": new_roster,
             "care_texts": care_texts,
             "styles": styles,
+            "custom_styles": custom_styles,
             "default_label": default_label,
             "inject_for_others": bool(payload.get("inject_for_others", False)),
         }
@@ -513,6 +534,17 @@ class IdentityPlugin(MaiBotPlugin):
                 if key in style_data and str(style_data[key] or "").strip():
                     identity[key] = str(style_data[key])
 
+            # 自定义档位：整体替换 [identity.custom_styles] 表
+            custom = record.get("custom_styles") or {}
+            if isinstance(custom, dict):
+                custom_table = tomlkit.table()
+                for name, prompt in custom.items():
+                    n = str(name or "").strip()
+                    ptext = str(prompt or "").strip()
+                    if n and ptext and n not in ("主人", "朋友", "群友"):
+                        custom_table[n] = ptext
+                identity["custom_styles"] = custom_table
+
             # 其他
             if record.get("default_label"):
                 identity["default_label"] = str(record["default_label"])
@@ -581,7 +613,22 @@ class IdentityPlugin(MaiBotPlugin):
             for key in ("owner_style", "friend_style", "member_style"):
                 if key in style_data and str(style_data[key] or "").strip():
                     setattr(cfg, key, str(style_data[key]))
-            if data.get("default_label") in _LABEL_RULES:
+            # 自定义档位：必须先恢复，否则后面的 default_label / roster label 校验
+            # 会因为「档位不存在」把它们全部回落掉。
+            custom_from_ui = data.get("custom_styles")
+            if isinstance(custom_from_ui, dict):
+                # 整体替换，不做合并 —— 合并会让「已删除的档位」永远留着。
+                rebuilt: Dict[str, str] = {}
+                for name, prompt in custom_from_ui.items():
+                    n = str(name or "").strip()
+                    ptext = str(prompt or "").strip()
+                    if n and ptext and n not in _LABEL_RULES:
+                        rebuilt[n] = ptext
+                try:
+                    cfg.custom_styles = rebuilt
+                except Exception as exc:
+                    self.ctx.logger.warning(f"[身份] 应用自定义档位失败: {exc}")
+            if data.get("default_label") in self._valid_labels():
                 cfg.default_label = str(data["default_label"])
             if "inject_for_others" in data:
                 cfg.inject_for_others = bool(data["inject_for_others"])
@@ -620,7 +667,7 @@ class IdentityPlugin(MaiBotPlugin):
                     except (TypeError, ValueError):
                         level = 0
                 qq = re.sub(r"\D", "", qq_raw.translate(_FULLWIDTH_MAP))
-                if label not in _LABEL_RULES:
+                if label not in self._valid_labels():
                     if qq or label:
                         self.ctx.logger.warning(
                             f"[身份] 名单项 {qq_raw}={label} 档位无法识别，已跳过"
@@ -652,7 +699,7 @@ class IdentityPlugin(MaiBotPlugin):
                     continue
                 qq = re.sub(r"\D", "", left)
                 label = right.strip().split()[0] if right.strip() else ""
-                if label not in _LABEL_RULES:
+                if label not in self._valid_labels():
                     self.ctx.logger.warning(f"[身份] 名单第「{body}」段档位无法识别，已跳过")
                     continue
                 if qq:
@@ -726,14 +773,32 @@ class IdentityPlugin(MaiBotPlugin):
         if label:
             return label, True
         default = str(self.config.identity.default_label or "").strip()
-        if default not in _LABEL_RULES:
+        if default not in self._valid_labels():
             if default and not getattr(self, "_default_label_warned", False):
                 self._default_label_warned = True
                 self.ctx.logger.warning(
-                    f"[身份] default_label「{default}」不是支持的档位（{'/'.join(_LABEL_RULES)}），已回落为「{_DEFAULT_LABEL}」"
+                    f"[身份] default_label「{default}」不是支持的档位（{'/'.join(sorted(self._valid_labels()))}），已回落为「{_DEFAULT_LABEL}」"
                 )
             default = _DEFAULT_LABEL
         return default, False
+
+    def _custom_styles(self) -> Dict[str, str]:
+        """取自定义档位表（档位名 → 提示词），顺手过滤空值。"""
+
+        raw = getattr(self.config.identity, "custom_styles", None) or {}
+        out: Dict[str, str] = {}
+        if isinstance(raw, dict):
+            for key, value in raw.items():
+                name = str(key or "").strip()
+                text = str(value or "").strip()
+                if name and text:
+                    out[name] = text
+        return out
+
+    def _valid_labels(self) -> set:
+        """当前所有合法档位 = 内置三档 + 自定义档位。"""
+
+        return set(_LABEL_RULES) | set(self._custom_styles())
 
     def _style_for(self, label: str, user_id: str = "") -> str:
         """按档位取「态度 + 关心程度」文案（来自配置，可在面板里改）。"""
@@ -744,7 +809,12 @@ class IdentityPlugin(MaiBotPlugin):
             "朋友": cfg.friend_style,
             "群友": cfg.member_style,
         }
-        text = str(table.get(label) or "").strip() or _LABEL_RULES.get(label, _LABEL_RULES[_DEFAULT_LABEL])
+        # 自定义档位：优先用 custom_styles 里的提示词
+        text = str(self._custom_styles().get(label) or "").strip()
+        if not text:
+            text = str(table.get(label) or "").strip()
+        if not text:
+            text = _LABEL_RULES.get(label, _LABEL_RULES[_DEFAULT_LABEL])
 
         # 追加「关心表达频率」的全局口径（滑块 1-4 选档 + 对应文本框的措辞）
         care_text = self._care_text(user_id)

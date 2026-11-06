@@ -1,6 +1,8 @@
 {
   "schema_version": 2,
-  "required_capabilities": ["custom_pages"],
+  "required_capabilities": [
+    "custom_pages"
+  ],
   "workspace_title": "身份认知",
   "pages": [
     {
@@ -12,14 +14,21 @@
       "mode": "custom",
       "entry": "webui/identity.html",
       "queries": {
-        "load": { "api": "identity_load", "version": "1" }
+        "load": {
+          "api": "identity_load",
+          "version": "1"
+        }
       },
       "actions": {
         "save": {
           "api": "identity_save",
           "version": "1",
           "parameters": {
-            "data": { "type": "string", "required": true, "max_length": 4000 }
+            "data": {
+              "type": "string",
+              "required": true,
+              "max_length": 20000
+            }
           }
         }
       }

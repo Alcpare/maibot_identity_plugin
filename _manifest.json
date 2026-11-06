@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "version": "1.0.7",
-  "name": "身份认知（测试版）",
-  "description": "【测试版】手动白名单：让她知道当前对话者是主人 / 朋友 / 普通群友，从而用对态度。QQ 号只用于内部识别，永不进入提示词。",
+  "version": "1.1.0",
+  "name": "身份认知",
+  "description": "【测试版】手动白名单：让她知道当前对话者是主人 / 朋友 / 普通群友，从而用对态度。QQ 号只用于内部识别，永不进入提示词。支持在 WebUI 里自定义身份档位（如「同事」「父亲」），每档可写独立提示词。",
   "author": {
     "name": "Alcpare",
     "url": "https://github.com/Alcpare"
@@ -15,7 +15,7 @@
   },
   "changelog": "README.md",
   "host_application": {
-    "min_version": "1.3.6",
+    "min_version": "1.3.19",
     "max_version": "1.3.99"
   },
   "sdk": {
