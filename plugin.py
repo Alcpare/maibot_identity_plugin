@@ -177,6 +177,10 @@ _FULLWIDTH_MAP = str.maketrans(
 # 否则仍然是注释（例如 ``100000001 = 主人   # Alcpare``）。
 _ROSTER_SEP_RE = re.compile(r"#(?=\s*\d+\s*[=,])")
 
+# ``platform:id`` 形式：前缀是适配器平台名（字母数字下划线连字符），后接冒号。
+# 只认「前缀里不含冒号」的形式，避免把 Beeper 那种自带冒号的 ID 误切。
+_PLATFORM_ID_RE = re.compile(r"^(?P<platform>[A-Za-z0-9_-]{1,32}):(?P<id>.+)$")
+
 
 def normalize_user_id(raw: object) -> str:
     """把用户 ID 规范化成用于内部识别的字符串。
@@ -189,7 +193,7 @@ def normalize_user_id(raw: object) -> str:
     现在的规则：
 
     - 只做全角转半角 + 去掉首尾空白，**不再删除任何字符**；
-    - 纯数字 ID 原样返回（保证既有 QQ 名单不受影响）。
+    - ``platform:id`` 写法原样保留（由 :func:`split_platform_id` 解析）。
 
     Args:
         raw: 适配器给出的原始 ID，或配置里读到的值。
@@ -199,6 +203,53 @@ def normalize_user_id(raw: object) -> str:
     """
 
     return str(raw or "").translate(_FULLWIDTH_MAP).strip()
+
+
+def split_platform_id(value: str) -> Tuple[str, str]:
+    """把 ``platform:id`` 拆成 ``(platform, id)``；不带前缀时 platform 为空串。
+
+    只有「前缀是平台名（字母数字下划线连字符）+ 冒号」才认为带前缀。
+    Beeper 的 ``@I-9NcLz...:local-facebook.localhost`` 前缀含 ``@``/``-``，
+    不符合条件，会整体当作 id（platform 为空），从而保持「不限平台」的语义。
+
+    Args:
+        value: 名单里的 user_id 或适配器给的 ID。
+
+    Returns:
+        Tuple[str, str]: (平台名, 纯 ID)。无前缀时平台名为空串。
+    """
+
+    text = str(value or "").strip()
+    m = _PLATFORM_ID_RE.match(text)
+    if not m:
+        return "", text
+    return m.group("platform").lower(), m.group("id").strip()
+
+
+def roster_id_matches(
+    entry_platform: str, entry_id: str, msg_platform: str, msg_id: str
+) -> bool:
+    """判断名单项是否匹配当前消息的发送者。
+
+    名单写 ``platform:id`` 时只匹配该平台；只写 ID 时匹配任意平台
+    （兼容既有 QQ 名单，也方便「同一个人在同一平台」的常见用法）。
+
+    Args:
+        entry_platform: 名单项解析出的平台名，空串表示不限平台。
+        entry_id: 名单项的纯 ID。
+        msg_platform: 适配器报告的当前平台名。
+        msg_id: 当前消息发送者的 ID。
+
+    Returns:
+        bool: 是否匹配。
+    """
+
+    if not entry_id or entry_id != msg_id:
+        return False
+    if not entry_platform:
+        return True
+    return entry_platform.strip().lower() == str(msg_platform or "").strip().lower()
+
 
 
 def _split_roster_segments(line: str) -> List[str]:
@@ -1066,17 +1117,38 @@ class IdentityPlugin(MaiBotPlugin):
                 f"[身份] 迁移后的名单写回失败（不影响本次运行）: {exc}"
             )
 
-    def _label_for(self, user_id: str) -> Tuple[str, bool]:
+    def _label_for(self, user_id: str, platform: str = "") -> Tuple[str, bool]:
         """返回 (档位, 是否命中名单)。
+
+        名单里可能写 ``platform:id``，此时只在该平台生效；只写 ID 则任意平台都算命中。
+        同一个 ID 在不同平台都配了时，带平台的那条优先。
 
         名单外的档位取配置里的 ``default_label``，但**必须先校验**：
         这个字符串会原样进入提示词（``（你的{label}）``），
         填了「群主」这类未支持的档位时要回落成默认档，而不是把无效值写进提示词。
+
+        Args:
+            user_id: 适配器给的发送者 ID。
+            platform: 适配器报告的平台名；空串表示未知。
+
+        Returns:
+            Tuple[str, bool]: (档位, 是否命中名单)。
         """
 
-        label = self._labels.get(str(user_id))
-        if label:
-            return label, True
+        raw_id = str(user_id or "").strip()
+        msg_platform = str(platform or "").strip().lower()
+        hit: Optional[str] = None
+        for entry_key, entry_label in self._labels.items():
+            entry_platform, entry_id = split_platform_id(entry_key)
+            if not roster_id_matches(entry_platform, entry_id, msg_platform, raw_id):
+                continue
+            if entry_platform:
+                # 带平台的精确命中，直接返回（优先级最高）
+                return entry_label, True
+            hit = entry_label
+        if hit:
+            return hit, True
+
         default = str(self.config.identity.default_label or "").strip()
         if default not in self._valid_labels():
             if default and not getattr(self, "_default_label_warned", False):
@@ -1317,9 +1389,12 @@ class IdentityPlugin(MaiBotPlugin):
             )
             session_id = str(message.get("session_id") or "")
             is_notify = bool(message.get("is_notify"))
+            # 适配器平台名（napcat / beeper / ...），用于 platform:id 形式的名单匹配
+            platform = str(message.get("platform") or "").strip()
 
             record = {
                 "user_id": user_id,
+                "platform": platform,
                 "name": display_name,
                 "session": session_id,
                 "group": str(group_info.get("group_id") or ""),
@@ -1342,7 +1417,7 @@ class IdentityPlugin(MaiBotPlugin):
 
             # 索引 1：原始消息 ID + 宿主可能使用的短别名（超长 ID 会被宿主缩短）
             self._recent[message_id] = record
-            self._record_message(user_id, self._label_for(user_id)[0])
+            self._record_message(user_id, self._label_for(user_id, platform)[0])
             self._save_stats()
             alias = self._display_message_id(message_id)
             if alias and alias != message_id:
@@ -1819,7 +1894,7 @@ class IdentityPlugin(MaiBotPlugin):
             self.ctx.logger.debug(f"[身份][跳过/{stage}] 本轮已注入过，跳过（key={dedupe_key}）")
             return base
 
-        label, listed = self._label_for(speaker["user_id"])
+        label, listed = self._label_for(speaker["user_id"], speaker.get("platform") or "")
         if not listed and not cfg.inject_for_others:
             self.ctx.logger.debug(
                 f"[身份][跳过/{stage}] 说话者不在名单（且只对名单内生效）："
