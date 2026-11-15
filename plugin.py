@@ -177,6 +177,37 @@ _FULLWIDTH_MAP = str.maketrans(
 # 否则仍然是注释（例如 ``100000001 = 主人   # Alcpare``）。
 _ROSTER_SEP_RE = re.compile(r"#(?=\s*\d+\s*[=,])")
 
+# 纯数字 ID 判定（QQ / 群号这类）
+_NUMERIC_ID_RE = re.compile(r"^\d+$")
+
+
+def normalize_user_id(raw: object) -> str:
+    """把用户 ID 规范化成用于内部识别的字符串。
+
+    适配器给的身份标识不一定是纯数字：QQ / NapCat 是纯数字 QQ 号，
+    但 Beeper 这类桥接平台给的是 ``@I-9NcLz...:local-facebook.localhost``
+    这样的字符串。早先这里一律 ``re.sub(r"\\D", "", ...)`` 把所有非数字字符
+    删掉，非数字 ID 就被清成空串，导致跨平台用户加进名单后永远匹配不上。
+
+    现在的规则：
+
+    - 只做全角转半角 + 去掉首尾空白，**不再删除任何字符**；
+    - 纯数字 ID 原样返回（保证既有 QQ 名单不受影响）。
+
+    Args:
+        raw: 适配器给出的原始 ID，或配置里读到的值。
+
+    Returns:
+        str: 规范化后的 ID；输入为空时返回空串。
+    """
+
+    text = str(raw or "").translate(_FULLWIDTH_MAP).strip()
+    if not text:
+        return ""
+    if _NUMERIC_ID_RE.match(text):
+        return text
+    return text
+
 
 def _split_roster_segments(line: str) -> List[str]:
     """把一行名单切成若干段（兼容「一行多人、# 分隔」与「行尾注释」）。"""
@@ -483,7 +514,7 @@ class IdentityPlugin(MaiBotPlugin):
         raw_roster = payload.get("roster") or []
         new_roster = []
         for item in raw_roster:
-            qq = re.sub(r"\D", "", str(item.get("user_id") or ""))
+            qq = normalize_user_id(item.get("user_id"))
             label = str(item.get("label") or "朋友")
             if label not in self._valid_labels():
                 label = "朋友"
@@ -948,7 +979,7 @@ class IdentityPlugin(MaiBotPlugin):
                         level = int(getattr(entry, "care_level", 0) or 0)
                     except (TypeError, ValueError):
                         level = 0
-                qq = re.sub(r"\D", "", qq_raw.translate(_FULLWIDTH_MAP))
+                qq = normalize_user_id(qq_raw)
                 if label not in self._valid_labels():
                     if qq or label:
                         self.ctx.logger.warning(
@@ -979,7 +1010,7 @@ class IdentityPlugin(MaiBotPlugin):
                     left, right = body.split(",", 1)
                 else:
                     continue
-                qq = re.sub(r"\D", "", left)
+                qq = normalize_user_id(left)
                 label = right.strip().split()[0] if right.strip() else ""
                 if label not in self._valid_labels():
                     self.ctx.logger.warning(f"[身份] 名单第「{body}」段档位无法识别，已跳过")
@@ -2064,7 +2095,7 @@ class IdentityPlugin(MaiBotPlugin):
     @Command(
         "identity_add",
         description="把某个 QQ 加进身份名单，身份不存在时自动创建",
-        pattern=r"^/identity\s+(?:add\s+)?(?P<qq>\d{5,12})\s+(?P<label>\S{1,16})\s*$",
+        pattern=r"^/identity\s+(?:add\s+)?(?P<qq>\S{1,128})\s+(?P<label>\S{1,16})\s*$",
         permission="operator",
     )
     async def cmd_identity_add(self, message: Any = None, matched_groups: Any = None, **kwargs: Any):
@@ -2072,7 +2103,7 @@ class IdentityPlugin(MaiBotPlugin):
 
         del kwargs
         groups = matched_groups if isinstance(matched_groups, dict) else {}
-        qq = re.sub(r"\D", "", str(groups.get("qq") or ""))
+        qq = normalize_user_id(groups.get("qq"))
         label = str(groups.get("label") or "").strip()
         stream_id = self._stream_of(message)
 
@@ -2116,7 +2147,7 @@ class IdentityPlugin(MaiBotPlugin):
     @Command(
         "identity_del",
         description="把某个 QQ 从身份名单移除",
-        pattern=r"^/identity\s+(?:del|delete|remove)\s+(?P<qq>\d{5,12})\s*$",
+        pattern=r"^/identity\s+(?:del|delete|remove)\s+(?P<qq>\S{1,128})\s*$",
         permission="operator",
     )
     async def cmd_identity_del(self, message: Any = None, matched_groups: Any = None, **kwargs: Any):
@@ -2124,7 +2155,7 @@ class IdentityPlugin(MaiBotPlugin):
 
         del kwargs
         groups = matched_groups if isinstance(matched_groups, dict) else {}
-        qq = re.sub(r"\D", "", str(groups.get("qq") or ""))
+        qq = normalize_user_id(groups.get("qq"))
         stream_id = self._stream_of(message)
 
         record = self._load_ui_override_dict()

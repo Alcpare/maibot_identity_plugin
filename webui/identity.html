@@ -1085,7 +1085,7 @@ input[type="file"]::file-selector-button {
     }
 
     var toolbar = '<div class="roster-bar">'
-      + '<input type="text" id="rosterFilter" placeholder="搜索 QQ 号或身份…" value="' + esc(filterText) + '">'
+      + '<input type="text" id="rosterFilter" placeholder="搜索 ID 或身份…" value="' + esc(filterText) + '">'
       + '<button data-act="openAdd">+ 添加身份</button>'
       + "</div>";
 
@@ -1116,8 +1116,8 @@ input[type="file"]::file-selector-button {
       + '<div class="modal-head">添加身份</div>'
       + '<div class="modal-body">'
       +   '<div class="field">'
-      +     '<label>QQ 号</label>'
-      +     '<input type="text" data-act="newid" placeholder="例如 123456789">'
+      +     '<label>用户 ID</label>'
+      +     '<input type="text" data-act="newid" placeholder="QQ 号或平台 ID">'
       +   "</div>"
       +   '<div class="field">'
       +     '<label>身份</label>'
@@ -1480,10 +1480,12 @@ input[type="file"]::file-selector-button {
         el.onclick = function () {
           var idEl = document.querySelector('[data-act="newid"]');
           var lbEl = document.querySelector('[data-act="newlabel"]');
-          var qq = ((idEl && idEl.value) || "").trim().replace(/\D/g, "");
-          if (!qq) { setMsg("QQ 号不能为空", "err"); return; }
+          // 不再删非数字字符：跨平台适配器（Beeper 等）的 ID 不是纯数字，
+          // 早先 replace(/\D/g,"") 会把它们清成空串，加进来也匹配不上。
+          var qq = ((idEl && idEl.value) || "").trim();
+          if (!qq) { setMsg("ID 不能为空", "err"); return; }
           var exists = (state.roster || []).some(function (e) { return e.user_id === qq; });
-          if (exists) { setMsg("这个 QQ 号已经在名单里了", "err"); return; }
+          if (exists) { setMsg("这个 ID 已经在名单里了", "err"); return; }
           state.roster = state.roster || [];
           state.roster.push({
             user_id: qq,
