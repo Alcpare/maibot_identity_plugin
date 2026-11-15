@@ -2162,7 +2162,7 @@ class IdentityPlugin(MaiBotPlugin):
     @Command(
         "identity_add",
         description="把某个 QQ 加进身份名单，身份不存在时自动创建",
-        pattern=r"^/identity\s+(?:add\s+)?(?P<qq>\S{1,128})\s+(?P<label>\S{1,16})\s*$",
+        pattern=r"^/identity\s+(?:add\s+)?(?P<qq>(?!(?:del|delete|remove|list|ls)(?:\s|$))\S{1,128})\s+(?P<label>\S{1,16})\s*$",
         permission="operator",
     )
     async def cmd_identity_add(self, message: Any = None, matched_groups: Any = None, **kwargs: Any):
