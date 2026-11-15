@@ -1,0 +1,70 @@
+{
+  "schema_version": 2,
+  "required_capabilities": [
+    "custom_pages",
+    "image_upload"
+  ],
+  "workspace_title": "身份认知",
+  "pages": [
+    {
+      "id": "identity",
+      "title": "身份认知",
+      "description": "给每个人单独设定身份档位和关心频率；可以上传 AI 画像让她认识自己",
+      "icon": "settings",
+      "mode": "custom",
+      "entry": "webui/identity.html",
+      "queries": {
+        "load": {
+          "api": "identity_load",
+          "version": "1"
+        }
+      },
+      "actions": {
+        "save": {
+          "api": "identity_save",
+          "version": "1",
+          "parameters": {
+            "data": {
+              "type": "string",
+              "required": true,
+              "max_length": 20000
+            }
+          }
+        },
+        "portrait_add": {
+          "api": "identity_portrait_add",
+          "version": "1",
+          "parameters": {
+            "upload_id": {
+              "type": "string",
+              "required": true,
+              "max_length": 128
+            },
+            "note": {
+              "type": "string",
+              "required": false,
+              "max_length": 500
+            }
+          }
+        },
+        "portrait_del": {
+          "api": "identity_portrait_del",
+          "version": "1",
+          "parameters": {
+            "portrait_id": {
+              "type": "string",
+              "required": true,
+              "max_length": 64
+            }
+          }
+        }
+      },
+      "uploads": {
+        "portrait": {
+          "action": "portrait_add",
+          "image_max_edge": 1024
+        }
+      }
+    }
+  ]
+}

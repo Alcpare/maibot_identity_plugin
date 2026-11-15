@@ -1,0 +1,1715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>身份认知</title>
+<style>
+
+/* ── 设计语言：millennium 奶油色像素主题 ───────────────────────────
+   重要：插件页跑在宿主 <iframe sandbox="allow-scripts"> 里，
+   那是独立源（opaque origin），**读不到宿主 :root 上的 CSS 变量**。
+   所以这里的色值必须全部写死，不能写 #efe8d4 ——
+   那样会全部取到空值，边框/圆角/背景一起失效（这正是之前"模块边框消失"的原因）。
+
+   色值取自宿主 millennium 浅色主题的真实变量：
+     --background 42 30.6% 80.8%   → #efe8d4 奶油底
+     --card       43.2 38.5% 87.3% → #f2ecdb 卡片
+     --border     41.8 18.2% 64.5% → #b5ab94 边框（原色对比只有 1.8:1，太淡）
+     操作色取 --chart-1 橙棕        → #d9623a
+   ─────────────────────────────────────────────────────────────── */
+
+:root {
+  --ui-bg: #efe8d4;
+  --ui-card: #f2ecdb;
+  /* 边框：宿主原色 #b5ab94 在卡片上只有 1.8:1，实际看不见，
+     这里压深到 4.5:1，卡片轮廓才立得住 */
+  --ui-line: #6e6553;
+  --ui-text: #4a443a;
+  --ui-muted: #625c4c;
+  --ui-accent: #8fd6a0;
+  --ui-accent-fg: #2a3d2c;
+  --ui-danger: #c2413a;
+  --ui-ok: #2a7d50;
+
+  /* 操作色：橙棕（宿主主按钮同色） */
+  --ui-action: #d9623a;
+  --ui-action-fg: #2e1f18;
+  --ui-action-dim: #d9623a2e;
+  /* 金棕：次要强调 */
+  --ui-gold: #d9a030;
+  /* 强调文字：绿色 */
+  --ui-link: #2a7d50;
+
+  --ui-r: 0px;
+  /* 功能区块圆角：宿主像素主题是直角，但卡片留直角显得生硬 */
+  --ui-r-block: 10px;
+  --ui-r-inner: 8px;
+  --ui-r-pill: 999px;
+  --ui-line-w: 2px;
+  /* 硬边投影：零模糊偏移，和宿主的像素风格一致 */
+  --ui-hard: 3px 3px 0 0 var(--ui-line);
+  --ui-hard-sm: 2px 2px 0 0 var(--ui-line);
+}
+
+/* 深色主题：宿主切深色时，靠 prefers-color-scheme 跟着变 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ui-bg: #221e1a;
+    --ui-card: #2a2521;
+    --ui-line: #8d857a;
+    --ui-text: #e6e0d8;
+    --ui-muted: #a99f92;
+    --ui-action: #e17f47;
+    --ui-action-fg: #201510;
+    --ui-action-dim: #e17f4733;
+    --ui-gold: #d9a94a;
+    --ui-link: #6dbf8e;
+    --ui-r: 8px;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; padding: 28px 24px 48px;
+  background: var(--ui-bg); color: var(--ui-text);
+  /* 继承宿主字体链，不再写死系统字体 */
+  font-family: inherit;
+  font-size: 14px; line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1120px; margin: 0 auto; }
+
+/* 数字一律用等宽字体，和像素主题对齐 */
+.mono, .stat .v, .person .pqq, .care-name, .badge, .pct, .topbar .status {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 顶栏 + 精细状态栏 ─────────────────────────────── */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  padding: 14px 0 12px; margin: -14px 0 10px;
+  background: linear-gradient(var(--ui-bg) 88%, transparent);
+  border-bottom: var(--ui-line-w) solid #6e65538c;
+}
+.topbar-row {
+  display: flex; align-items: center; gap: 12px;
+}
+.topbar h1 {
+  margin: 0; font-size: 19px; font-weight: 700; letter-spacing: .5px;
+  display: flex; align-items: center; gap: 10px;
+}
+/* 标题前的像素方块装饰 */
+.topbar h1::before {
+  content: ""; width: 10px; height: 10px; background: var(--ui-action);
+  box-shadow: 3px 3px 0 0 #6e6553;
+  flex: 0 0 auto;
+}
+/* 状态徽标：带语义色 */
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; padding: 2px 10px;
+  border: var(--ui-line-w) solid #6e6553b3;
+  border-radius: var(--ui-r);
+  background: #f2ecdb;
+  color: var(--ui-muted);
+  white-space: nowrap;
+}
+.status-pill .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; flex: 0 0 auto;
+}
+.status-pill.ok { color: var(--ui-ok); border-color: #2a7d5080; }
+.status-pill.err { color: var(--ui-danger); border-color: #c2413a80; }
+.status-pill.dirty { color: var(--ui-gold); border-color: #d9a0308c; }
+.status-pill.busy { color: var(--ui-action); border-color: #d9623a80; }
+.status-pill.busy .dot { animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+
+/* 第二行：细粒度指标条 */
+.metrics {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 0 18px; margin-top: 10px;
+  font-size: 11px; color: var(--ui-muted);
+}
+.metrics .m {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 0;
+}
+.metrics .m .lab { opacity: .75; letter-spacing: .4px; }
+.metrics .m .val {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  color: var(--ui-text); font-weight: 600;
+}
+.metrics .m .val.warn { color: var(--ui-danger); }
+.metrics .m .val.good { color: var(--ui-ok); }
+.metrics .sep {
+  width: 1px; height: 10px; background: #6e655399;
+}
+@media (max-width: 720px) {
+  .metrics { gap: 0 12px; }
+  .metrics .sep { display: none; }
+}
+
+
+/* ── 统计面板 ─────────────────────────────────────── */
+.stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+  margin-bottom: 16px;
+}
+@media (max-width: 780px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+.stat {
+  background: var(--ui-card);
+  border: var(--ui-line-w) solid var(--ui-line);
+  border-radius: var(--ui-r-block);
+  box-shadow: var(--ui-hard);
+  padding: 16px 18px 14px;
+  position: relative; overflow: hidden;
+}
+/* 顶部一条操作色横条，像仪表盘的色标 */
+.stat::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px;
+  background: var(--ui-action);
+}
+.stat .k {
+  font-size: 11px; color: var(--ui-muted); letter-spacing: .8px;
+  margin-bottom: 6px; text-transform: uppercase;
+}
+.stat .v {
+  font-size: 30px; font-weight: 700; line-height: 1.05; letter-spacing: -0.5px;
+}
+.stat .v small {
+  font-size: 11px; font-weight: 400; color: var(--ui-muted);
+  margin-left: 6px; letter-spacing: 0;
+}
+
+/* ── 身份活跃度：一个总扇形（每块 = 该身份聊天+注入次数）── */
+.dist-card {
+  background: var(--ui-card);
+  border: var(--ui-line-w) solid var(--ui-line);
+  border-radius: var(--ui-r-block);
+  box-shadow: var(--ui-hard);
+  padding: 14px 18px 16px; margin-bottom: 18px;
+}
+.dist-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 11px; color: var(--ui-muted); margin-bottom: 14px;
+  letter-spacing: .7px; text-transform: uppercase;
+}
+.dist-head .total {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  color: var(--ui-text); letter-spacing: 0;
+}
+.pie-body {
+  display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
+}
+.pie-wrap { flex: 0 0 auto; }
+.pie-big path { transition: opacity .15s; cursor: default; }
+.pie-big path:hover { opacity: .78; }
+.pie-big .pie-center-num {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 22px; font-weight: 700; fill: var(--ui-text);
+}
+.pie-big .pie-center-lab {
+  font-size: 10px; fill: var(--ui-muted); letter-spacing: .5px;
+}
+/* ── 排行榜：名次 + 身份 + QQ 号 ───────────────────── */
+.rank-list {
+  flex: 1 1 320px; min-width: 0;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.rank-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 12px;
+  background: var(--ui-bg);
+  border: var(--ui-line-w) solid #6e655340;
+  border-radius: var(--ui-r-inner);
+  transition: border-color .12s, transform .12s;
+}
+.rank-item:hover {
+  border-color: var(--ui-line);
+  transform: translateX(3px);
+}
+/* 前三名：名次徽章加粗、描边加深 */
+.rank-item .rank-no {
+  flex: 0 0 auto;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 11px; font-weight: 700;
+  color: var(--ui-muted);
+  background: var(--ui-card);
+  border: var(--ui-line-w) solid #6e655366;
+  border-radius: 50%;
+}
+.rank-1 .rank-no {
+  color: #2e1f18; background: var(--ui-action);
+  border-color: var(--ui-line);
+}
+.rank-2 .rank-no {
+  color: var(--ui-text); background: #e8dcc0;
+  border-color: var(--ui-line);
+}
+.rank-3 .rank-no {
+  color: var(--ui-text); background: #efe4cc;
+  border-color: #6e655399;
+}
+.rank-item .dot {
+  width: 12px; height: 12px; border-radius: 3px;
+  border: var(--ui-line-w) solid #6e655399; flex: 0 0 auto;
+}
+.rank-item .lg-main {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.rank-item .lg-name {
+  font-size: 13px; font-weight: 700; color: var(--ui-text);
+  letter-spacing: .3px;
+}
+.rank-item .lg-qq {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 10px; color: var(--ui-muted);
+  margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+@media (max-width: 720px) {
+  .pie-body { gap: 16px; justify-content: center; }
+  .rank-list { flex: 1 1 100%; }
+}
+
+/* ── 折叠卡片 ─────────────────────────────────────── */
+.card {
+  background: var(--ui-card);
+  border: var(--ui-line-w) solid var(--ui-line);
+  border-radius: var(--ui-r-block);
+  box-shadow: var(--ui-hard);
+  padding: 16px 18px; margin-bottom: 16px;
+}
+.card-title {
+  display: flex; align-items: center; gap: 9px;
+  cursor: pointer; user-select: none;
+  font-size: 13px; font-weight: 700; color: var(--ui-text);
+  letter-spacing: .5px; padding-bottom: 4px;
+}
+.card-title:hover { color: var(--ui-action); }
+.card-title .caret {
+  display: inline-block; width: 9px; transition: transform .15s;
+  font-size: 9px; opacity: .55;
+}
+.card-title .badge {
+  margin-left: auto; font-size: 11px; color: var(--ui-muted);
+  background: var(--ui-muted); padding: 1px 9px;
+  border: var(--ui-line-w) solid var(--ui-line); border-radius: var(--ui-r);
+  font-weight: 400; letter-spacing: 0;
+}
+.card.collapsed .caret { transform: rotate(-90deg); }
+.card.collapsed .card-body { display: none; }
+.card-body { padding-top: 12px; }
+
+/* ── 身份卡片网格 ─────────────────────────────────── */
+.roster-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(292px, 1fr));
+  gap: 14px; margin-top: 4px;
+}
+.person {
+  background: var(--ui-bg);
+  border: var(--ui-line-w) solid var(--ui-line);
+  border-radius: var(--ui-r-inner);
+  box-shadow: var(--ui-hard-sm);
+  padding: 14px; position: relative;
+  transition: box-shadow .12s, transform .12s;
+}
+.person:hover {
+  box-shadow: 4px 4px 0 0 #6e6553;
+  transform: translate(-1px, -1px);
+}
+/* 左侧操作色竖条，标明"这是一条记录" */
+.person::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  background: var(--ui-action);
+}
+.person .phead {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  padding-left: 6px;
+}
+.person .avatar {
+  width: 36px; height: 36px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  color: var(--ui-action-fg);
+  border: var(--ui-line-w) solid #6e65538c;
+  border-radius: var(--ui-r);
+}
+.person .pinfo { flex: 1 1 auto; min-width: 0; }
+.person .pname {
+  font-size: 14px; font-weight: 700; letter-spacing: .3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.person .pqq {
+  font-size: 11px; color: var(--ui-muted); letter-spacing: .5px;
+}
+.person .del {
+  background: transparent; border: none; color: var(--ui-danger);
+  font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 5px;
+  opacity: .45; flex: 0 0 auto; border-radius: var(--ui-r);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+.person .del:hover { opacity: 1; background: #c2413a1f; }
+
+/* 关心频率：粗方块，点亮的用操作色 */
+.care-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding-left: 6px; }
+.care-dots { display: flex; gap: 4px; flex: 0 0 auto; }
+.care-dots .d {
+  width: 18px; height: 12px; border-radius: var(--ui-r);
+  background: var(--ui-muted);
+  border: var(--ui-line-w) solid #6e655373;
+  cursor: pointer; transition: background .12s, border-color .12s;
+}
+.care-dots .d:hover { border-color: var(--ui-action); }
+.care-dots .d.on { background: var(--ui-action); border-color: hsl(#d9623a / .8); }
+.care-name {
+  font-size: 11px; color: var(--ui-muted); letter-spacing: .5px;
+}
+
+.person .prow { display: flex; gap: 8px; align-items: center; padding-left: 6px; }
+
+/* ── 表单 ─────────────────────────────────────────── */
+.field { margin-bottom: 14px; }
+.field:last-child { margin-bottom: 0; }
+label {
+  display: block; font-size: 11px; color: var(--ui-muted);
+  margin-bottom: 6px; letter-spacing: .8px; text-transform: uppercase;
+}
+input[type="text"], select, textarea {
+  width: 100%; background: var(--ui-bg); color: var(--ui-text);
+  border: var(--ui-line-w) solid var(--ui-line); border-radius: var(--ui-r);
+  padding: 8px 10px; font-size: 13px; font-family: inherit;
+  outline: none; transition: border-color .12s, box-shadow .12s;
+}
+input[type="text"]:focus, select:focus, textarea:focus {
+  border-color: var(--ui-action);
+  box-shadow: 0 0 0 3px var(--ui-action-dim);
+}
+textarea { min-height: 64px; line-height: 1.6; resize: vertical; }
+.person input[type="text"], .person select { padding: 5px 8px; font-size: 12px; }
+.person input[type="text"] { flex: 1 1 auto; min-width: 0; }
+.person select { flex: 0 0 auto; min-width: 86px; }
+
+/* ── 按钮：抬起式硬边 ─────────────────────────────── */
+button {
+  background: var(--ui-action); color: var(--ui-action-fg);
+  border: var(--ui-line-w) solid #6e6553a6;
+  border-radius: var(--ui-r);
+  padding: 9px 20px; font-size: 13px; font-weight: 700;
+  font-family: inherit; letter-spacing: .5px;
+  cursor: pointer; box-shadow: var(--ui-hard-sm);
+  transition: transform .08s, box-shadow .08s;
+}
+button:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 0 #6e6553; }
+button:active { transform: translate(2px, 2px); box-shadow: none; }
+button:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: var(--ui-hard-sm); }
+button.ghost {
+  background: var(--ui-card); color: var(--ui-text);
+  border: var(--ui-line-w) solid var(--ui-line);
+  padding: 7px 16px; font-weight: 600;
+}
+button.ghost:hover { background: var(--ui-bg); border-color: var(--ui-action); color: var(--ui-action); }
+
+/* ── 添加区 ───────────────────────────────────────── */
+.add-box {
+  border: var(--ui-line-w) dashed #6e6553d9;
+  border-radius: var(--ui-r);
+  padding: 14px 16px; margin-top: 16px;
+  background: #efe8d466;
+}
+.add-box .add-title {
+  font-size: 11px; color: var(--ui-muted); margin-bottom: 12px;
+  letter-spacing: .8px; text-transform: uppercase;
+}
+.add-box .row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+
+/* ── 空状态 ───────────────────────────────────────── */
+.empty-state { text-align: center; padding: 36px 16px; color: var(--ui-muted); }
+.empty-state .big {
+  font-size: 30px; opacity: .35; margin-bottom: 10px;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+.empty-state .txt { font-size: 13px; margin-bottom: 16px; letter-spacing: .3px; }
+
+/* ── 其他 ─────────────────────────────────────────── */
+.toolbar { display: flex; gap: 12px; align-items: center; margin-top: 18px; }
+.loading { color: var(--ui-muted); text-align: center; padding: 48px 0; letter-spacing: .8px; }
+
+.care-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 680px) { .care-grid { grid-template-columns: 1fr; } }
+.slider-hint {
+  font-size: 11px; color: var(--ui-muted); margin-top: 8px;
+  padding-left: 10px; position: relative; line-height: 1.6;
+}
+.slider-hint::before {
+  content: ""; position: absolute; left: 0; top: 7px;
+  width: 4px; height: 4px; background: var(--ui-action);
+}
+
+.custom-item {
+  border-top: var(--ui-line-w) dashed #6e6553b3;
+  padding-top: 14px; margin-top: 14px;
+}
+.custom-item:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+.custom-item .chead {
+  display: flex; align-items: center; gap: 9px; margin-bottom: 9px;
+}
+.custom-item .cname {
+  font-size: 13px; font-weight: 700; color: var(--ui-link); letter-spacing: .3px;
+}
+.custom-item .cused {
+  font-size: 11px; color: var(--ui-muted); background: var(--ui-muted);
+  padding: 1px 8px; border: var(--ui-line-w) solid var(--ui-line);
+  border-radius: var(--ui-r); font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+.custom-item .del {
+  margin-left: auto; background: transparent; border: none;
+  color: var(--ui-danger); font-size: 18px; cursor: pointer;
+  padding: 2px 5px; opacity: .45; border-radius: var(--ui-r);
+}
+.custom-item .del:hover { opacity: 1; background: #c2413a1f; }
+
+.search-box { margin-bottom: 14px; }
+.search-box input { padding-left: 12px; }
+
+/* ── 提示词组（身份 / 关心频率合并在一个卡片里）───────── */
+.prompt-group + .prompt-group {
+  margin-top: 18px; padding-top: 16px;
+  border-top: var(--ui-line-w) dashed #6e6553b3;
+}
+.prompt-group .group-head {
+  font-size: 11px; color: var(--ui-muted); letter-spacing: .8px;
+  text-transform: uppercase; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.prompt-group .group-head::after {
+  content: ""; flex: 1 1 auto; height: 1px;
+  background: #6e655380;
+}
+
+
+/* ── 顶栏紧凑指标 ───────────────────────────────────── */
+.metrics {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: 0 16px; margin-top: 9px;
+}
+.metrics .m {
+  display: inline-flex; align-items: baseline; gap: 4px;
+}
+.metrics .m .val {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 13px; font-weight: 700; color: var(--ui-text);
+  font-variant-numeric: tabular-nums;
+}
+.metrics .m .val.good { color: var(--ui-ok); }
+.metrics .m .val.warn { color: var(--ui-danger); }
+.metrics .m .lab {
+  font-size: 10px; color: var(--ui-muted);
+  letter-spacing: .4px; text-transform: uppercase;
+}
+.metrics .sep {
+  width: 1px; height: 10px; align-self: center;
+  background: #6e655399;
+}
+@media (max-width: 640px) {
+  .metrics { gap: 0 12px; }
+  .metrics .sep { display: none; }
+}
+
+/* ── 个人卡片底部统计 ───────────────────────────────── */
+/* ── 个人卡片底部统计 ───────────────────────────────── */
+.pstats {
+  display: flex; gap: 14px; align-items: center;
+  margin-top: 10px; padding: 8px 0 0 6px;
+  border-top: var(--ui-line-w) dashed #6e655380;
+}
+.pstats .ps { display: inline-flex; align-items: baseline; gap: 4px; }
+.pstats .ps-k {
+  font-size: 10px; color: var(--ui-muted); letter-spacing: .4px;
+}
+.pstats .ps-v {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px; font-weight: 700; color: var(--ui-text);
+  font-variant-numeric: tabular-nums;
+}
+.pstats .ps-last { margin-left: auto; }
+.pstats .ps-last .ps-v { font-size: 11px; font-weight: 400; color: var(--ui-muted); }
+/* ── 名单工具条（搜索 + 添加身份）────────────────────── */
+.roster-bar {
+  display: flex; gap: 10px; align-items: center; margin-bottom: 14px;
+}
+.roster-bar input[type="text"] {
+  flex: 1 1 auto; min-width: 0;
+}
+.roster-bar button {
+  flex: 0 0 auto; padding: 8px 16px; font-size: 12px;
+}
+
+/* ── 自定义身份块（并入名单卡片）──────────────────────── */
+.custom-block {
+  margin-top: 20px; padding-top: 16px;
+  border-top: var(--ui-line-w) dashed #6e6553b3;
+}
+
+/* ── 弹窗 ───────────────────────────────────────────── */
+.modal-mask {
+  position: fixed; inset: 0; z-index: 100;
+  background: hsl(0 0% 0% / .45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  animation: fadeIn .12s ease-out;
+}
+@keyframes fadeIn { from { opacity: 0; } }
+.modal {
+  background: var(--ui-card);
+  border: var(--ui-line-w) solid var(--ui-line);
+  border-radius: var(--ui-r);
+  box-shadow: 6px 6px 0 0 #6e6553;
+  border-radius: 12px;
+  width: 100%; max-width: 420px;
+  animation: popIn .14s ease-out;
+}
+@keyframes popIn {
+  from { transform: translateY(-8px); opacity: 0; }
+}
+.modal-head {
+  padding: 14px 18px; font-size: 14px; font-weight: 700;
+  letter-spacing: .3px;
+  border-bottom: var(--ui-line-w) solid var(--ui-line);
+  background: var(--ui-bg);
+  display: flex; align-items: center; gap: 8px;
+}
+.modal-head::before {
+  content: ""; width: 8px; height: 8px; background: var(--ui-action);
+  box-shadow: 2px 2px 0 0 #6e6553;
+  flex: 0 0 auto;
+}
+.modal-body { padding: 18px; }
+.modal-foot {
+  padding: 14px 18px; display: flex; gap: 10px; justify-content: flex-end;
+  border-top: var(--ui-line-w) solid #6e655380;
+  background: var(--ui-bg);
+}
+
+/* ── 细节圆角：让功能区的边角统一柔和 ─────────────────── */
+.card, .stat, .dist-card {
+  overflow: hidden;
+}
+.stat::before, .person::before {
+  border-radius: var(--ui-r-block) 0 0 var(--ui-r-block);
+}
+input[type="text"], select, textarea {
+  border-radius: var(--ui-r-inner);
+}
+button {
+  border-radius: var(--ui-r-inner);
+}
+button.ghost {
+  border-radius: var(--ui-r-inner);
+}
+.person .avatar {
+  border-radius: var(--ui-r-inner);
+}
+.care-dots .d {
+  border-radius: 3px;
+}
+.dist-legend .dot {
+  border-radius: 3px;
+}
+.card-title .badge,
+.custom-item .cused,
+.status-pill {
+  border-radius: var(--ui-r-pill);
+}
+.add-box {
+  border-radius: var(--ui-r-inner);
+}
+.roster-bar button {
+  border-radius: var(--ui-r-inner);
+}
+.modal-head {
+  border-radius: 12px 12px 0 0;
+}
+.modal-foot {
+  border-radius: 0 0 12px 12px;
+}
+
+
+/* ── AI 画像 ───────────────────────────────────────── */
+.portrait-list {
+  display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;
+}
+.portrait-item {
+  position: relative;
+  display: flex; flex-direction: column; gap: 8px;
+  width: 200px; padding: 10px;
+  background: var(--ui-bg);
+  border: var(--ui-line-w) solid #6e655366;
+  border-radius: var(--ui-r-inner);
+  transition: border-color .12s, transform .12s;
+}
+.portrait-item:hover {
+  border-color: var(--ui-line);
+  transform: translateY(-2px);
+}
+.portrait-item .pimg {
+  position: relative;
+  width: 100%; aspect-ratio: 1 / 1;
+  background: var(--ui-card);
+  border: var(--ui-line-w) solid #6e655340;
+  border-radius: var(--ui-r-inner);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.portrait-item .pimg img {
+  width: 100%; height: 100%; object-fit: cover; display: none;
+}
+.portrait-item .pimg img.loaded { display: block; }
+.portrait-item .pimg img.loaded + .pimg-ph { display: none; }
+.portrait-item .pimg-ph {
+  font-size: 28px; opacity: .3;
+}
+.portrait-item .pdesc {
+  font-size: 11px; line-height: 1.6; color: var(--ui-muted);
+  max-height: 3.2em; overflow: hidden;
+}
+.portrait-item .del {
+  position: absolute; top: 4px; right: 4px;
+  background: var(--ui-card); border: var(--ui-line-w) solid #6e655355;
+  color: var(--ui-danger); font-size: 15px; line-height: 1;
+  width: 22px; height: 22px; border-radius: 50%;
+  cursor: pointer; opacity: .6; padding: 0;
+}
+.portrait-item .del:hover { opacity: 1; border-color: var(--ui-danger); }
+input[type="file"] {
+  width: 100%; font-size: 12px; color: var(--ui-muted);
+  padding: 5px 8px;
+  background: var(--ui-bg);
+  border: var(--ui-line-w) solid var(--ui-line);
+  border-radius: var(--ui-r-inner);
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button {
+  margin-right: 8px; padding: 4px 10px;
+  background: var(--ui-action); color: var(--ui-action-fg);
+  border: var(--ui-line-w) solid #6e6553a6;
+  border-radius: 6px; font-size: 11px; cursor: pointer;
+}
+
+/* ── 通用确认弹窗 ─────────────────────────────────── */
+.confirm-text {
+  font-size: 13px; line-height: 1.7; color: var(--ui-text);
+  word-break: break-word;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="app"><div class="loading">加载中…</div></div>
+</div>
+
+<script>
+(function () {
+  var LEVELS = [
+    { value: 1, name: "不提", desc: "完全不主动关心", color: "var(--c1)" },
+    { value: 2, name: "偶尔", desc: "偶尔提一句", color: "var(--c2)" },
+    { value: 3, name: "正常", desc: "自然关心", color: "var(--c3)" },
+    { value: 4, name: "经常", desc: "可以多关心几句", color: "var(--c4)" }
+  ];
+  var BASE_LABELS = ["主人", "朋友", "群友"];
+  var AVATAR_COLORS = ["#8a4429", "#5a6b7a", "#7a8a6b", "#a08050", "#6a5a7a", "#7a5a5a"];
+
+  function allLabels() {
+    var custom = Object.keys((state && state.custom_styles) || {});
+    var out = BASE_LABELS.slice();
+    custom.forEach(function (n) {
+      if (n && out.indexOf(n) < 0) out.push(n);
+    });
+    return out;
+  }
+
+  var state = null;
+  var dirty = false;
+  var filterText = "";
+
+  var api = {
+    load: function () { return window.maibot.query("load", {}); },
+    save: function (data) {
+      return window.maibot.action("save", { data: JSON.stringify(data) });
+    },
+    // 画像上传：文件走 uploads 通道（不走 JSON），note 是用户手写的补充描述
+    portraitAdd: function (file, note) {
+      return window.maibot.upload("portrait", file, { note: note || "" });
+    },
+    portraitDel: function (portraitId) {
+      return window.maibot.action("portrait_del", { portrait_id: portraitId });
+    }
+  };
+
+  // ── 自动保存 ────────────────────────────────────────────────
+  var saveTimer = null;
+  var saving = false;
+  var pendingSave = false;   // 保存中又来了新改动：排队，别丢
+  var rev = 0;               // 每次改动自增，用来判断「存的是不是最新版」
+
+  function doSave(onDone) {
+    // 上一次还没回来：记下待存，等它结束后再存一次，不丢弃这次改动
+    if (saving) { pendingSave = true; return; }
+    saving = true;
+    collect();
+    var snapshotRev = rev;
+    setMsg("保存中…", "busy");
+
+    var chain;
+    try {
+      chain = api.save({
+        roster: state.roster,
+        care_texts: state.care_texts,
+        styles: state.styles || {},
+        custom_styles: state.custom_styles || {},
+        default_label: state.default_label,
+        inject_for_others: state.inject_for_others,
+        // 画像也要带上：否则保存名单时会把已上传的画像冲掉
+        portraits: (state.portraits || []).map(function (p) {
+          return { id: p.id, desc: p.desc, file: p.file };
+        })
+      });
+    } catch (err) {
+      // api.save 同步抛错也要复位，否则 saving 卡死、整页再也不保存
+      saving = false;
+      setMsg("保存失败：" + ((err && err.message) || String(err)), "err");
+      if (onDone) onDone();
+      return;
+    }
+
+    chain.then(function () {
+      // 只有「存的就是最新版」才清 dirty；否则保持未保存，避免谎报成功
+      if (snapshotRev === rev) {
+        dirty = false;
+        var d = new Date();
+        var hh = ("0" + d.getHours()).slice(-2);
+        var mi = ("0" + d.getMinutes()).slice(-2);
+        var ss = ("0" + d.getSeconds()).slice(-2);
+        setMsg("已自动保存 " + hh + ":" + mi + ":" + ss, "ok");
+      } else {
+        setMsg("有新改动待保存", "dirty");
+      }
+    }).catch(function (err) {
+      setMsg("保存失败：" + ((err && err.message) || String(err)), "err");
+    }).then(function () {
+      saving = false;
+      if (onDone) onDone();
+      // 保存期间攒下的改动，现在补存
+      if (pendingSave) {
+        pendingSave = false;
+        doSave();
+      }
+    });
+  }
+
+  function autoSave(immediate, onDone) {
+    dirty = true;
+    rev++;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    if (immediate) { doSave(onDone); return; }
+    setMsg("未保存", "dirty");
+    saveTimer = setTimeout(function () {
+      saveTimer = null;
+      doSave(onDone);
+    }, 800);
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function levelOf(v) {
+    var n = Number(v) || 3;
+    for (var i = 0; i < LEVELS.length; i++) {
+      if (LEVELS[i].value === n) return LEVELS[i];
+    }
+    return LEVELS[2];
+  }
+
+  function avatarColor(idx) {
+    return AVATAR_COLORS[idx % AVATAR_COLORS.length];
+  }
+
+  // ── 统计 ────────────────────────────────────────────────────
+  function computeStats() {
+    var roster = state.roster || [];
+    var byLabel = {};
+    var byLevel = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    roster.forEach(function (e) {
+      var lb = e.label || "群友";
+      byLabel[lb] = (byLabel[lb] || 0) + 1;
+      var lv = Number(e.care_level) || 3;
+      byLevel[lv] = (byLevel[lv] || 0) + 1;
+    });
+    var levels = Object.keys(byLevel).filter(function (k) { return byLevel[k] > 0; });
+    var avg = 0;
+    if (roster.length) {
+      var sum = roster.reduce(function (a, e) { return a + (Number(e.care_level) || 3); }, 0);
+      avg = (sum / roster.length).toFixed(1);
+    }
+    return {
+      total: roster.length,
+      labels: Object.keys(byLabel).length,
+      byLabel: byLabel,
+      byLevel: byLevel,
+      levels: levels,
+      avg: avg
+    };
+  }
+
+  function renderStats(st) {
+    var customCount = Object.keys(state.custom_styles || {}).length;
+    var stats = state.stats || {};
+    var uptime = fmtUptime(stats.uptime_seconds || 0);
+    return '<div class="stats">'
+      + '<div class="stat"><div class="k">名单人数</div>'
+      +   '<div class="v">' + st.total + '<small>人</small></div></div>'
+      + '<div class="stat"><div class="k">身份档</div>'
+      +   '<div class="v">' + (3 + customCount) + '<small>个（含 ' + customCount + ' 自定义）</small></div></div>'
+      + '<div class="stat"><div class="k">平均关心度</div>'
+      +   '<div class="v">' + (st.total ? st.avg : "—") + '<small>/ 4</small></div></div>'
+      + '<div class="stat"><div class="k">运行时间</div>'
+      +   '<div class="v" id="statUptime" style="font-size:17px;line-height:1.6;">' + uptime + '</div></div>'
+      + "</div>";
+  }
+
+  // 一个总扇形：每块 = 一个人的（聊天次数 + 注入次数）
+  // 扇区按人划分，排行榜同样按人排序，两边顺序一一对应
+  function renderDist(st) {
+    if (!st.total) return "";
+
+    // ① 按人收集数据：每人 { qq, label, rounds, injections, last }
+    var people = (state.stats || {}).people || [];
+    var roster = state.roster || [];
+    var byQq = {};
+
+    function slot(qq) {
+      if (!byQq[qq]) byQq[qq] = { qq: qq, label: "群友", rounds: 0, injections: 0, last: 0, fromRoster: false };
+      return byQq[qq];
+    }
+
+    // 名单里的人先建档（保证没统计的人也能出现）
+    roster.forEach(function (e) {
+      if (!e.user_id) return;
+      var s = slot(String(e.user_id));
+      s.label = e.label || "群友";
+      s.fromRoster = true;
+    });
+
+    // 统计里的人补数据。
+    // 注意：label 以名单为准（上面已经设好），这里**不要**用 top_label 覆盖 ——
+    // top_label 是历史统计里出现最多的档位，改过身份后它会一直是旧值，
+    // 表现就是排行榜显示的身份跟名单对不上（对方明明改成朋友，这里还写群友）。
+    people.forEach(function (p) {
+      if (!p.user_id) return;
+      var s = slot(String(p.user_id));
+      s.rounds = p.rounds || 0;
+      s.injections = p.injections || 0;
+      s.last = p.last_seen || 0;
+      // 只在名单里没有这个人时才用统计里的标签兜底
+      if (!s.fromRoster && p.top_label) s.label = p.top_label;
+    });
+
+    var rows = Object.keys(byQq).map(function (k) { return byQq[k]; });
+    if (!rows.length) return "";
+
+    // ② 按「聊天 + 注入」总量从大到小排；同分按 QQ 号稳定排序
+    rows.sort(function (a, b) {
+      var va = a.rounds + a.injections;
+      var vb = b.rounds + b.injections;
+      if (vb !== va) return vb - va;
+      return a.qq.localeCompare(b.qq);
+    });
+
+    var grand = 0;
+    rows.forEach(function (r) { grand += r.rounds + r.injections; });
+
+    // ③ 画扇形：每人一块
+    var R = 86, SW = 34, CX = 100, CY = 100;
+    var inner = R - SW;
+    var svg = '<svg class="pie-big" width="200" height="200" viewBox="0 0 200 200">';
+
+    var positive = rows.filter(function (r) { return (r.rounds + r.injections) > 0; });
+
+    if (grand <= 0) {
+      svg += '<circle cx="' + CX + '" cy="' + CY + '" r="' + (R - SW / 2) + '" '
+        + 'fill="none" stroke="#6e65534d" stroke-width="' + SW + '"/>';
+    } else if (positive.length === 1) {
+      svg += '<circle cx="' + CX + '" cy="' + CY + '" r="' + (R - SW / 2) + '" '
+        + 'fill="none" stroke="' + avatarColor(0) + '" stroke-width="' + SW + '"/>';
+    } else {
+      var startAngle = -Math.PI / 2;
+      positive.forEach(function (r) {
+        var v = r.rounds + r.injections;
+        var i = rows.indexOf(r);
+        var frac = v / grand;
+        var endAngle = startAngle + frac * Math.PI * 2;
+        var large = frac > 0.5 ? 1 : 0;
+        var x1 = CX + R * Math.cos(startAngle), y1 = CY + R * Math.sin(startAngle);
+        var x2 = CX + R * Math.cos(endAngle), y2 = CY + R * Math.sin(endAngle);
+        var x3 = CX + inner * Math.cos(endAngle), y3 = CY + inner * Math.sin(endAngle);
+        var x4 = CX + inner * Math.cos(startAngle), y4 = CY + inner * Math.sin(startAngle);
+        svg += '<path d="M' + x1.toFixed(2) + ' ' + y1.toFixed(2)
+          + ' A' + R + ' ' + R + ' 0 ' + large + ' 1 ' + x2.toFixed(2) + ' ' + y2.toFixed(2)
+          + ' L' + x3.toFixed(2) + ' ' + y3.toFixed(2)
+          + ' A' + inner + ' ' + inner + ' 0 ' + large + ' 0 ' + x4.toFixed(2) + ' ' + y4.toFixed(2)
+          + ' Z" fill="' + avatarColor(i) + '" stroke="#f2ecdb" stroke-width="2">'
+          + '<title>' + esc(r.label) + ' ' + esc(r.qq)
+          + '（' + (frac * 100).toFixed(1) + '%）</title></path>';
+        startAngle = endAngle;
+      });
+    }
+
+    // 圆心：总互动次数
+    svg += '<text class="pie-center-num" x="' + CX + '" y="' + (CY + 4) + '" '
+      + 'text-anchor="middle">' + grand + '</text>';
+    svg += '<text class="pie-center-lab" x="' + CX + '" y="' + (CY + 24) + '" '
+      + 'text-anchor="middle">次互动</text>';
+    svg += "</svg>";
+
+    // ④ 排行榜：每人一行，名次与扇形顺序一致
+    var legend = rows.map(function (r, i) {
+      return '<div class="rank-item rank-' + (i + 1) + '">'
+        + '<span class="rank-no">' + (i + 1) + '</span>'
+        + '<span class="dot" style="background:' + avatarColor(i) + ';"></span>'
+        + '<span class="lg-main">'
+        +   '<span class="lg-name">' + esc(r.label) + '</span>'
+        +   '<span class="lg-qq">' + esc(r.qq) + '</span>'
+        + '</span>'
+        + '</div>';
+    }).join("");
+
+    return '<div class="dist-card">'
+      + '<div class="dist-head"><span>身份活跃度排行</span>'
+      +   '<span class="total">共 ' + grand + ' 次互动</span></div>'
+      + '<div class="pie-body">'
+      +   '<div class="pie-wrap">' + svg + '</div>'
+      +   '<div class="rank-list">' + legend + '</div>'
+      + '</div>'
+      + "</div>";
+  }
+
+  // 超过 12 小时算「很久没聊」
+  function isLongAgo(ts) {
+    if (!ts) return true;
+    return (Date.now() / 1000 - ts) > 12 * 3600;
+  }
+
+  function lastSeenText(ts) {
+    if (!ts) return "还没聊过";
+    var age = Date.now() / 1000 - ts;
+    if (age < 60) return "刚刚";
+    if (age < 3600) return Math.max(1, Math.round(age / 60)) + " 分钟前";
+    if (age < 12 * 3600) return Math.round(age / 3600) + " 小时前";
+    return "很久没聊";
+  }
+
+  // ── 个人卡片 ────────────────────────────────────────────────
+  function renderPerson(e, i) {
+    var lv = Number(e.care_level) || 3;
+    var lvl = levelOf(lv);
+    var opts = allLabels().map(function (l) {
+      return '<option value="' + esc(l) + '"' + (e.label === l ? " selected" : "") + ">"
+        + esc(l) + "</option>";
+    }).join("");
+    var dots = LEVELS.map(function (L) {
+      return '<span class="d' + (L.value <= lv ? " on" : "") + '"'
+        + ' data-act="care" data-idx="' + i + '" data-lv="' + L.value + '"'
+        + ' title="' + L.name + " · " + L.desc + '"></span>';
+    }).join("");
+    var initial = (e.user_id || "?").slice(-2);
+
+    // 该人的历史统计（轮次 / 注入 / 最后活跃）
+    var people = (state.stats || {}).people || [];
+    var stat = null;
+    for (var k = 0; k < people.length; k++) {
+      if (people[k].user_id === e.user_id) { stat = people[k]; break; }
+    }
+    var roundN = stat ? (stat.rounds || 0) : 0;
+    var lastTxt = "";
+    if (stat && stat.last_seen) {
+      var age = Date.now() / 1000 - stat.last_seen;
+      if (age < 3600) lastTxt = Math.max(1, Math.round(age / 60)) + " 分钟前";
+      else if (age < 86400) lastTxt = Math.round(age / 3600) + " 小时前";
+      else lastTxt = Math.round(age / 86400) + " 天前";
+    }
+
+    return '<div class="person" data-pidx="' + i + '">'
+      + '<div class="phead">'
+      +   '<div class="avatar" style="background:' + avatarColor(i) + '">' + esc(initial) + '</div>'
+      +   '<div class="pinfo">'
+      +     '<div class="pname">' + esc(e.label || "群友") + '</div>'
+      +     '<div class="pqq">' + esc(e.user_id) + '</div>'
+      +   '</div>'
+      +   '<button class="del" data-act="del" data-idx="' + i + '" title="删除">×</button>'
+      + '</div>'
+      + '<div class="care-row">'
+      +   '<div class="care-dots">' + dots + '</div>'
+      +   '<span class="care-name">' + lvl.name + '</span>'
+      + '</div>'
+      + '<div class="prow">'
+      +   '<select data-act="label" data-idx="' + i + '">' + opts + '</select>'
+      + '</div>'
+      + '<div class="pstats">'
+      +   '<span class="ps"><span class="ps-k">轮次</span><span class="ps-v">' + roundN + '</span></span>'
+      +   (lastTxt ? '<span class="ps ps-last"><span class="ps-k">最后</span><span class="ps-v">' + lastTxt + '</span></span>' : "")
+      + '</div>'
+      + '</div>';
+  }
+
+  function renderRoster() {
+    var roster = state.roster || [];
+    var shown = roster.map(function (e, i) { return { e: e, i: i }; });
+    if (filterText) {
+      var q = filterText.toLowerCase();
+      shown = shown.filter(function (o) {
+        return String(o.e.user_id).indexOf(q) >= 0
+          || String(o.e.label || "").toLowerCase().indexOf(q) >= 0;
+      });
+    }
+
+    var toolbar = '<div class="roster-bar">'
+      + '<input type="text" id="rosterFilter" placeholder="搜索 QQ 号或身份…" value="' + esc(filterText) + '">'
+      + '<button data-act="openAdd">+ 添加身份</button>'
+      + "</div>";
+
+    if (!roster.length) {
+      return toolbar
+        + '<div id="rosterGrid"><div class="empty-state">'
+        + '<div class="big">📋</div>'
+        + '<div class="txt">名单还是空的，加上第一个人吧</div>'
+        + "</div></div>";
+    }
+
+    var cards = shown.map(function (o) { return renderPerson(o.e, o.i); }).join("");
+    if (!cards) cards = '<div class="empty-state"><div class="txt">没有匹配的人</div></div>';
+    return toolbar + '<div class="roster-grid" id="rosterGrid">' + cards + "</div>";
+  }
+
+  // ── 添加身份弹窗 ────────────────────────────────────────────
+  function openAddModal() {
+    var old = document.getElementById("addModal");
+    if (old) return;
+    var opts = allLabels().map(function (l) {
+      return '<option value="' + esc(l) + '">' + esc(l) + "</option>";
+    }).join("");
+    var div = document.createElement("div");
+    div.id = "addModal";
+    div.className = "modal-mask";
+    div.innerHTML = '<div class="modal">'
+      + '<div class="modal-head">添加身份</div>'
+      + '<div class="modal-body">'
+      +   '<div class="field">'
+      +     '<label>QQ 号</label>'
+      +     '<input type="text" data-act="newid" placeholder="例如 123456789">'
+      +   "</div>"
+      +   '<div class="field">'
+      +     '<label>身份</label>'
+      +     '<select data-act="newlabel">' + opts + "</select>"
+      +   "</div>"
+      + "</div>"
+      + '<div class="modal-foot">'
+      +   '<button class="ghost" data-act="closeAdd">取消</button>'
+      +   '<button data-act="addrow">添加</button>'
+      + "</div>"
+      + "</div>";
+    document.body.appendChild(div);
+    div.onclick = function (ev) { if (ev.target === div) closeAddModal(); };
+    bind();
+    var input = div.querySelector('[data-act="newid"]');
+    if (input) input.focus();
+    document.addEventListener("keydown", escKeyClose);
+  }
+
+  function closeAddModal() {
+    var m = document.getElementById("addModal");
+    if (m) m.remove();
+    document.removeEventListener("keydown", escKeyClose);
+  }
+
+  function escKeyClose(ev) {
+    if (ev.key === "Escape") closeAddModal();
+  }
+
+  // ── 通用确认弹窗 ────────────────────────────────────────────
+  // 宿主用 sandbox="allow-scripts" 加载本页（没有 allow-modals），
+  // 浏览器会直接忽略 window.confirm 并返回 false —— 凡是
+  // 「!confirm(...) 就 return」的地方都会变成点了没反应。
+  // 所以确认框必须自己做，不能用原生 confirm。
+  function askConfirm(message, onOk) {
+    var old = document.getElementById("confirmModal");
+    if (old) old.remove();
+
+    var div = document.createElement("div");
+    div.id = "confirmModal";
+    div.className = "modal-mask";
+    div.innerHTML = '<div class="modal" style="max-width:400px;">'
+      + '<div class="modal-head">确认</div>'
+      + '<div class="modal-body">'
+      +   '<div class="confirm-text">' + esc(message) + "</div>"
+      + "</div>"
+      + '<div class="modal-foot">'
+      +   '<button class="ghost" data-act="cfmNo">取消</button>'
+      +   '<button data-act="cfmYes">确定</button>'
+      + "</div>"
+      + "</div>";
+    document.body.appendChild(div);
+
+    function close() {
+      div.remove();
+      document.removeEventListener("keydown", onKey);
+    }
+    function onKey(ev) {
+      if (ev.key === "Escape") close();
+    }
+
+    div.onclick = function (ev) {
+      if (ev.target === div) close();
+    };
+    div.querySelector('[data-act="cfmYes"]').onclick = function () {
+      close();
+      onOk();
+    };
+    div.querySelector('[data-act="cfmNo"]').onclick = close;
+    document.addEventListener("keydown", onKey);
+    div.querySelector('[data-act="cfmYes"]').focus();
+  }
+
+  // ── 提示词编辑 ──────────────────────────────────────────────
+  var STYLE_ROWS = [
+    { key: "owner_style", name: "主人", hint: "最亲近的那个人" },
+    { key: "friend_style", name: "朋友", hint: "聊得挺多的熟人" },
+    { key: "member_style", name: "群友", hint: "名单外的人默认按这档" }
+  ];
+
+  function renderStyles(styles) {
+    return STYLE_ROWS.map(function (row) {
+      return '<div class="field">'
+        + '<label>' + row.name + '身份提示词'
+        + '<span style="color:var(--ui-muted);font-weight:400;margin-left:8px;">（' + row.hint + '）</span></label>'
+        + '<textarea data-style="' + row.key + '" style="min-height:80px;">'
+        + esc(styles[row.key] || "") + "</textarea>"
+        + "</div>";
+    }).join("");
+  }
+
+  function renderCareTexts(care) {
+    return LEVELS.map(function (l) {
+      return '<div class="field">'
+        + "<label>「" + l.name + "」档的措辞</label>"
+        + '<textarea data-care="' + l.value + '">' + esc(care[l.value] || "") + "</textarea>"
+        + "</div>";
+    }).join("");
+  }
+
+  function renderCustomStyles(custom) {
+    var names = Object.keys(custom || {});
+    var roster = state.roster || [];
+    var rows = names.map(function (name) {
+      var used = roster.filter(function (e) { return e.label === name; }).length;
+      return '<div class="custom-item">'
+        + '<div class="chead">'
+        +   '<span class="cname">' + esc(name) + '</span>'
+        +   (used ? '<span class="cused">' + used + ' 人在用</span>' : "")
+        +   '<button class="del" data-act="cdel" data-cname="' + esc(name) + '" title="删除">×</button>'
+        + "</div>"
+        + '<textarea data-custom="' + esc(name) + '" style="min-height:70px;">'
+        + esc(custom[name] || "") + "</textarea>"
+        + "</div>";
+    }).join("");
+    if (!rows) {
+      rows = '<div class="slider-hint" style="margin:0 0 10px;">'
+        + "还没有自定义身份。加一个之后，它就会出现在上面的身份下拉里。</div>";
+    }
+    return '<div class="custom-block">'
+      + '<div class="group-head">自定义身份的提示词</div>'
+      + rows
+      + '<div class="add-box">'
+      +   '<div class="add-title">+ 新建身份档位</div>'
+      +   '<div class="row">'
+      +     '<div class="field" style="flex:0 0 140px;margin:0;">'
+      +       '<label>身份名</label>'
+      +       '<input type="text" data-act="cname" placeholder="例如 同事" maxlength="16">'
+      +     "</div>"
+      +     '<div class="field" style="flex:1 1 240px;margin:0;">'
+      +       '<label>提示词</label>'
+      +       '<input type="text" data-act="cprompt" placeholder="例如 跟你说话的是同组同事，客气但不热乎">'
+      +     "</div>"
+      +     '<div class="field" style="flex:0 0 auto;margin:0;">'
+      +       '<button class="ghost" data-act="cadd">新建</button>'
+      +     "</div>"
+      +   "</div>"
+      +   '<div class="slider-hint">内置三档（主人 / 朋友 / 群友）不支持改名；'
+      +   "这里的档位建好后可以分配给任何人。</div>"
+      + "</div>"
+      + "</div>";
+  }
+
+  function title(text, key, badge) {
+    return '<div class="card-title" data-toggle="' + key + '">'
+      + '<span class="caret">▼</span><span>' + esc(text) + '</span>'
+      + (badge ? '<span class="badge">' + esc(badge) + '</span>' : "")
+      + "</div>";
+  }
+
+  // ── AI 画像：让她知道自己长什么样 ─────────────────────────
+  function renderPortraits() {
+    var list = state.portraits || [];
+    var rows = list.map(function (item) {
+      var thumb = item.thumb
+        ? '<img src="' + esc(item.thumb) + '" alt="" class="loaded">'
+        : "";
+      return '<div class="portrait-item">'
+        + '<div class="pimg">'
+        +   thumb
+        +   '<span class="pimg-ph">🖼</span>'
+        + '</div>'
+        + '<div class="pdesc">' + esc(item.desc) + '</div>'
+        + '<button class="del" data-act="pdel" data-pid="' + esc(item.id) + '" title="删除">×</button>'
+        + '</div>';
+    }).join("");
+
+    if (!list.length) {
+      rows = '<div class="slider-hint" style="margin:0 0 12px;">'
+        + "还没有画像。上传一张图，她会自动记下自己长什么样。</div>";
+    }
+
+    return '<div class="card" data-card="portraits">'
+      + title("AI 画像", "portraits", list.length ? list.length + " 张" : "")
+      + '<div class="card-body">'
+      +   '<div class="portrait-list">' + rows + '</div>'
+      +   '<div class="add-box">'
+      +     '<div class="add-title">+ 添加画像</div>'
+      +     '<div class="row">'
+      +       '<div class="field" style="flex:0 0 auto;margin:0;">'
+      +         '<label>选择图片</label>'
+      +         '<input type="file" id="portraitFile" accept="image/png,image/jpeg,image/webp">'
+      +       "</div>"
+      +       '<div class="field" style="flex:1 1 260px;margin:0;">'
+      +         '<label>补充描述（可选）</label>'
+      +         '<input type="text" id="portraitNote" maxlength="200" '
+      +           'placeholder="例如 银发红瞳，常穿白色连衣裙">'
+      +       "</div>"
+      +       '<div class="field" style="flex:0 0 auto;margin:0;">'
+      +         '<button class="ghost" data-act="padd">上传</button>'
+      +       "</div>"
+      +     "</div>"
+      +     '<div class="slider-hint">上传后会自动识别外形生成一句描述；'
+      +     "你填的补充会接在后面。最多 5 张。</div>"
+      +   "</div>"
+      + "</div>"
+      + "</div>";
+  }
+
+  // 顶栏：标题 + 状态 + 一行紧凑指标
+  function renderTopbar(st) {
+    var custom = Object.keys(state.custom_styles || {}).length;
+    var injectOthers = !!state.inject_for_others;
+
+    var stats = state.stats || {};
+    var totalRounds = stats.total_rounds || 0;
+    var activeToday = stats.active_today || 0;
+
+    // 运行时长改到下方统计卡里，顶栏只留状态药丸
+    return '<div class="topbar">'
+      + '<div class="topbar-row">'
+      +   '<h1>身份认知</h1>'
+      +   '<span class="status-pill" id="status">'
+      +     '<span class="dot"></span>'
+      +     '<span class="txt">就绪</span>'
+      +   '</span>'
+      + "</div>"
+      + '<div class="metrics">'
+      +   '<span class="m"><span class="val">' + totalRounds + '</span><span class="lab">累计轮次</span></span>'
+      +   '<span class="m"><span class="val">' + activeToday + '</span><span class="lab">今日活跃人数</span></span>'
+      +   '<span class="sep"></span>'
+      +   '<span class="m"><span class="val">' + st.total + '</span><span class="lab">名单</span></span>'
+      +   '<span class="m"><span class="val">' + (3 + custom) + '</span><span class="lab">档位</span></span>'
+      +   '<span class="m"><span class="val">' + (st.total ? st.avg : "—") + '</span><span class="lab">关心</span></span>'
+      +   '<span class="m"><span class="val ' + (injectOthers ? "good" : "warn") + '">'
+      +     (injectOthers ? "开" : "关") + '</span><span class="lab">名单外</span></span>'
+      + "</div>"
+      + "</div>";
+  }
+
+  // 秒数 → 精确到秒：1天14时23分05秒 / 3时05分12秒 / 12分30秒 / 30秒
+  function fmtUptime(sec) {
+    sec = Math.max(0, Math.floor(Number(sec) || 0));
+    var d = Math.floor(sec / 86400);
+    var h = Math.floor((sec % 86400) / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    var s = sec % 60;
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    if (d > 0) return d + "天" + h + "时" + pad(m) + "分" + pad(s) + "秒";
+    if (h > 0) return h + "时" + pad(m) + "分" + pad(s) + "秒";
+    if (m > 0) return m + "分" + pad(s) + "秒";
+    return s + "秒";
+  }
+
+  var openCards = {};
+  try {
+    openCards = JSON.parse(localStorage.getItem("dsh_identity_open") || "{}") || {};
+  } catch (e) { openCards = {}; }
+
+  function applyCollapse() {
+    document.querySelectorAll("[data-card]").forEach(function (card) {
+      var key = card.getAttribute("data-card");
+      if (openCards[key]) card.classList.remove("collapsed");
+    });
+  }
+
+  function render() {
+    var app = document.getElementById("app");
+    if (!state) { app.innerHTML = '<div class="loading">加载失败</div>'; return; }
+
+    var st = computeStats();
+    var defOpts = allLabels().map(function (l) {
+      return '<option value="' + esc(l) + '"' + (state.default_label === l ? " selected" : "") + ">"
+        + esc(l) + "</option>";
+    }).join("");
+
+    app.innerHTML = ''
+      + renderTopbar(st)
+      + renderStats(st)
+      + renderDist(st)
+      + '<div class="card" data-card="roster">'
+      +   title('身份名单', 'roster', st.total + ' 人')
+      +   '<div class="card-body">' + renderRoster() + renderCustomStyles(state.custom_styles || {}) + "</div>"
+      + "</div>"
+      + renderPortraits()
+      + '<div class="card" data-card="prompts">'
+      +   title('提示词', 'prompts', '身份 · 关心频率')
+      +   '<div class="card-body">'
+      +   '<div class="prompt-group">'
+      +     '<div class="group-head">身份提示词</div>'
+      +     renderStyles(state.styles || {})
+      +   "</div>"
+      +   '<div class="prompt-group">'
+      +     '<div class="group-head">关心频率措辞</div>'
+      +     '<div class="care-grid">' + renderCareTexts(state.care_texts || {}) + "</div>"
+      +   "</div>"
+      +   '<div class="slider-hint">身份提示词决定「这个人」怎么跟她说话；关心措辞决定「这一档」说什么。改完立即生效。</div>'
+      +   "</div>"
+      + "</div>"
+      + '<div class="card collapsed" data-card="other">'
+      +   title('其他设置', 'other')
+      +   '<div class="card-body">'
+      +   '<div class="field">'
+      +     "<label>名单外的人按哪一档对待</label>"
+      +     '<select data-act="default_label">' + defOpts + "</select>"
+      +   "</div>"
+      +   '<div class="field">'
+      +     '<label style="cursor:pointer;"><input type="checkbox" data-act="inject_for_others"'
+      +       (state.inject_for_others ? " checked" : "")
+      +       ' style="width:auto;margin-right:6px;vertical-align:-2px;">'
+      +     "对名单外的人也注入身份（关闭更省 token）</label>"
+      +   "</div>"
+      +   "</div>"
+      + "</div>"
+      + '<div class="toolbar">'
+      +   '<button data-act="save">保存</button>'
+      +   '<button class="ghost" data-act="reload">重新加载</button>'
+      + "</div>";
+
+    applyCollapse();
+    bind();
+  }
+
+  function bind() {
+    document.querySelectorAll("[data-toggle]").forEach(function (el) {
+      el.onclick = function () {
+        var key = el.getAttribute("data-toggle");
+        var card = el.closest("[data-card]");
+        if (!card) return;
+        var nowOpen = card.classList.contains("collapsed");
+        card.classList.toggle("collapsed");
+        openCards[key] = nowOpen;
+        try {
+          localStorage.setItem("dsh_identity_open", JSON.stringify(openCards));
+        } catch (e) { /* 忽略 */ }
+      };
+    });
+
+    var filterEl = document.getElementById("rosterFilter");
+    if (filterEl) {
+      filterEl.oninput = function () {
+        filterText = filterEl.value;
+        // 只替换名单网格，不动搜索框本身（否则输入法组词被打断、光标跳末尾），
+        // 也不动卡片里其它内容（自定义身份块会跟着一起没掉）。
+        var grid = document.getElementById("rosterGrid");
+        if (!grid) return;
+        var roster = state.roster || [];
+        var shown = roster.map(function (e, i) { return { e: e, i: i }; });
+        if (filterText) {
+          var q = filterText.toLowerCase();
+          shown = shown.filter(function (o) {
+            return String(o.e.user_id).indexOf(q) >= 0
+              || String(o.e.label || "").toLowerCase().indexOf(q) >= 0;
+          });
+        }
+        var cards = shown.map(function (o) { return renderPerson(o.e, o.i); }).join("");
+        grid.innerHTML = cards || '<div class="empty-state"><div class="txt">没有匹配的人</div></div>';
+        bind();
+      };
+    }
+
+    document.querySelectorAll("[data-act]").forEach(function (el) {
+      var act = el.getAttribute("data-act");
+
+      if (act === "openAdd") {
+        el.onclick = function () { openAddModal(); };
+      } else if (act === "closeAdd") {
+        el.onclick = function () { closeAddModal(); };
+      } else if (act === "addrow") {
+        el.onclick = function () {
+          var idEl = document.querySelector('[data-act="newid"]');
+          var lbEl = document.querySelector('[data-act="newlabel"]');
+          var qq = ((idEl && idEl.value) || "").trim().replace(/\D/g, "");
+          if (!qq) { setMsg("QQ 号不能为空", "err"); return; }
+          var exists = (state.roster || []).some(function (e) { return e.user_id === qq; });
+          if (exists) { setMsg("这个 QQ 号已经在名单里了", "err"); return; }
+          state.roster = state.roster || [];
+          state.roster.push({
+            user_id: qq,
+            label: (lbEl && lbEl.value) || "群友",
+            care_level: 3
+          });
+          filterText = "";
+          closeAddModal();
+          render();
+          autoSave(true);
+        };
+      } else if (act === "save") {
+        el.onclick = function () {
+          el.disabled = true;
+          if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+          doSave(function () { el.disabled = false; });
+        };
+      } else if (act === "reload") {
+        el.onclick = function () { load(true); };
+      } else if (act === "del") {
+        el.onclick = function () {
+          var i = Number(el.getAttribute("data-idx"));
+          var e = state.roster[i];
+          if (!e) return;
+          askConfirm(
+            "从名单里移除 " + (e.label || "") + "（" + e.user_id + "）？",
+            function () {
+              state.roster.splice(i, 1);
+              render();
+              autoSave(true);
+            }
+          );
+        };
+      } else if (act === "care") {
+        el.onclick = function () {
+          var i = Number(el.getAttribute("data-idx"));
+          var v = Number(el.getAttribute("data-lv"));
+          state.roster[i].care_level = v;
+          render();
+          autoSave(false);
+        };
+      } else if (act === "label") {
+        el.onchange = function () {
+          var i = Number(el.getAttribute("data-idx"));
+          state.roster[i].label = el.value;
+          render();
+          autoSave(false);
+        };
+      } else if (act === "default_label") {
+        el.onchange = function () { state.default_label = el.value; autoSave(false); };
+      } else if (act === "inject_for_others") {
+        el.onchange = function () { state.inject_for_others = el.checked; autoSave(false); };
+      } else if (act === "cadd") {
+        el.onclick = function () {
+          var nameEl = document.querySelector('[data-act="cname"]');
+          var promptEl = document.querySelector('[data-act="cprompt"]');
+          var name = ((nameEl && nameEl.value) || "").trim();
+          var prompt = ((promptEl && promptEl.value) || "").trim();
+          if (!name) { setMsg("身份名不能为空", "err"); return; }
+          if (name.length > 16) { setMsg("身份名最多 16 个字", "err"); return; }
+          if (BASE_LABELS.indexOf(name) >= 0) { setMsg("「" + name + "」是内置档位，不用自定义", "err"); return; }
+          if (!prompt) { setMsg("提示词不能为空", "err"); return; }
+          state.custom_styles = state.custom_styles || {};
+          state.custom_styles[name] = prompt;
+          render();
+          autoSave(true);
+        };
+      } else if (act === "cdel") {
+        el.onclick = function () {
+          var key = el.getAttribute("data-cname");
+          if (!key) return;
+          var usedBy = (state.roster || []).filter(function (e) { return e.label === key; });
+          var msg = usedBy.length > 0
+            ? "「" + key + "」还有 " + usedBy.length + " 个人在用，删掉后他们会变回「朋友」。确定删除吗？"
+            : "删除身份档位「" + key + "」？";
+          askConfirm(msg, function () {
+            delete state.custom_styles[key];
+            (state.roster || []).forEach(function (e) {
+              if (e.label === key) e.label = "朋友";
+            });
+            render();
+            autoSave(true);
+          });
+        };
+      } else if (act === "padd") {
+        el.onclick = function () {
+          var fileEl = document.getElementById("portraitFile");
+          var noteEl = document.getElementById("portraitNote");
+          var file = fileEl && fileEl.files && fileEl.files[0];
+          if (!file) { setMsg("先选一张图片", "err"); return; }
+          if ((state.portraits || []).length >= 5) {
+            setMsg("最多 5 张画像", "err");
+            return;
+          }
+          el.disabled = true;
+          setMsg("识别中…", "busy");
+          api.portraitAdd(file, noteEl ? noteEl.value : "")
+            .then(function (res) {
+              var data = (res && res.data) ? res.data : res;
+              if (data && data.saved === false) {
+                setMsg("上传失败：" + (data.error || "未知原因"), "err");
+                return null;
+              }
+              if (fileEl) fileEl.value = "";
+              if (noteEl) noteEl.value = "";
+              // 重新拉一次：上传返回里没有缩略图，得从 load 拿
+              return api.load().then(function (raw) {
+                var d2 = (raw && raw.data) ? raw.data : raw;
+                var d3 = (d2 && d2.result) ? d2.result : d2;
+                if (d3 && d3.portraits) state.portraits = d3.portraits;
+                render();
+                setMsg("画像已保存", "ok");
+              });
+            })
+            .catch(function (err) {
+              setMsg("上传失败：" + ((err && err.message) || String(err)), "err");
+            })
+            .then(function () { el.disabled = false; });
+        };
+      } else if (act === "pdel") {
+        el.onclick = function () {
+          var pid = el.getAttribute("data-pid");
+          if (!pid) return;
+          askConfirm("删除这张画像？", function () {
+            api.portraitDel(pid)
+              .then(function (res) {
+                var data = (res && res.data) ? res.data : res;
+                if (data && data.portraits) state.portraits = data.portraits;
+                render();
+                setMsg("已删除", "ok");
+              })
+              .catch(function (err) {
+                setMsg("删除失败：" + ((err && err.message) || String(err)), "err");
+              });
+          });
+        };
+      }
+    });
+
+    document.querySelectorAll("[data-care]").forEach(function (el) {
+      el.oninput = function () {
+        state.care_texts[el.getAttribute("data-care")] = el.value;
+        autoSave(false);
+      };
+    });
+
+    document.querySelectorAll("textarea[data-style]").forEach(function (el) {
+      el.oninput = function () {
+        state.styles = state.styles || {};
+        state.styles[el.getAttribute("data-style")] = el.value;
+        autoSave(false);
+      };
+    });
+
+    document.querySelectorAll("textarea[data-custom]").forEach(function (el) {
+      el.oninput = function () {
+        state.custom_styles = state.custom_styles || {};
+        state.custom_styles[el.getAttribute("data-custom")] = el.value;
+        autoSave(false);
+      };
+    });
+  }
+
+  function collect() {
+    state.roster = (state.roster || []).filter(function (e) {
+      return String(e.user_id || "").trim();
+    });
+  }
+
+  function setMsg(text, cls) {
+    var m = document.getElementById("status");
+    if (!m) return;
+    var txt = m.querySelector(".txt");
+    if (txt) txt.textContent = text || "就绪";
+    else m.textContent = text || "就绪";
+    m.className = "status-pill" + (cls ? " " + cls : "");
+  }
+
+  function load(force) {
+    if (dirty && !force) return;
+    setMsg("加载中…", "busy");
+    window.maibot.ready.then(function () {
+      return api.load();
+    }).then(function (raw) {
+      var data = raw || {};
+      if (!data.roster) {
+        if (data.data && typeof data.data === "object") data = data.data;
+        else if (data.result && typeof data.result === "object") data = data.result;
+      }
+      // 防御：拿回来的不是有效配置就别覆盖 state。
+      // 之前这里无条件 state = data，一旦接口返回空对象就会把名单清空，
+      // 接着自动保存会把空名单写回磁盘 —— 用户的名单就这么没了。
+      if (!data || typeof data !== "object" || !Array.isArray(data.roster)) {
+        setMsg("加载失败：返回数据无效", "err");
+        document.getElementById("app").innerHTML =
+          '<div class="loading">加载失败：服务端返回的数据不完整，已保持原有配置不变。</div>';
+        return;
+      }
+      state = data;
+      state.roster = state.roster || [];
+      state.care_texts = state.care_texts || {};
+      state.styles = state.styles || {};
+      state.custom_styles = state.custom_styles || {};
+      dirty = false;
+      render();
+      setMsg("就绪", "");
+    }).catch(function (err) {
+      document.getElementById("app").innerHTML =
+        '<div class="loading">加载失败：' + esc(err.message) + "</div>";
+    });
+  }
+
+  window.addEventListener("beforeunload", function (e) {
+    if (dirty) { e.preventDefault(); e.returnValue = ""; }
+  });
+
+  // 运行时长每秒自增（不等后端刷新）
+  setInterval(function () {
+    if (!state || !state.stats) return;
+    state.stats.uptime_seconds = (Number(state.stats.uptime_seconds) || 0) + 1;
+    var el = document.getElementById("statUptime");
+    if (el) el.textContent = fmtUptime(state.stats.uptime_seconds);
+  }, 1000);
+
+  load();
+})();
+</script>
+</body>
+</html>

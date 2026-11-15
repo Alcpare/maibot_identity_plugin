@@ -60,6 +60,7 @@ def make_plugin(tmpdir, roster="100000001 = 主人", default_label="群友"):
     p._latest_by_session = {}
     p._injected_keys = {}
     p._data_file = None
+    p._data_dir_failed = False
     p._last_save = 0.0
     return p
 

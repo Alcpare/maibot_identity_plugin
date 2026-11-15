@@ -69,6 +69,30 @@ assert plug._labels.get("100000004") == "朋友"
 assert plug._labels.get("100000006") == "朋友"
 assert "111111" not in plug._labels, "非法档位应被跳过"
 
+print("\n=== ①-b 一行多人（# 当分隔符）—— 实测踩过的坑 ===")
+plug.config.identity.roster = (
+    "123456789 = 主人 # 200000002 = 朋友 # 200000003 = 朋友 # 200000004 = 朋友"
+)
+plug._rebuild_roster()
+print("  解析结果:", plug._labels)
+assert len(plug._labels) == 4, f"一行四人应全部解析出来，实际 {plug._labels}"
+assert plug._labels.get("123456789") == "主人"
+assert plug._labels.get("200000002") == "朋友"
+assert plug._labels.get("200000004") == "朋友"
+
+print("\n=== ①-c 行尾注释不能被误当分隔符 ===")
+plug.config.identity.roster = (
+    "123456789 = 主人   # Alcpare\n"
+    "100000001 = 主人 # 这行是注释不是分隔符\n"
+    "100000002 = 朋友#100000003 = 朋友\n"      # 无空格也要支持
+)
+plug._rebuild_roster()
+print("  解析结果:", plug._labels)
+assert plug._labels.get("123456789") == "主人", "行尾注释后不该多出条目"
+assert len(plug._labels) == 4, f"应为 4 人（123456789/100000001/100000002/100000003），实际 {plug._labels}"
+assert plug._labels.get("100000002") == "朋友"
+assert plug._labels.get("100000003") == "朋友"
+
 print("\n=== ② 说话者定位（按最后一条 msg_id）===")
 plug._recent = {
     "m1": {"user_id": "999", "name": "路人", "session": "g1", "group": "900000001", "ts": 9e18},
