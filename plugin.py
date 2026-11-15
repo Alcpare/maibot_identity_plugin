@@ -177,9 +177,6 @@ _FULLWIDTH_MAP = str.maketrans(
 # 否则仍然是注释（例如 ``100000001 = 主人   # Alcpare``）。
 _ROSTER_SEP_RE = re.compile(r"#(?=\s*\d+\s*[=,])")
 
-# 纯数字 ID 判定（QQ / 群号这类）
-_NUMERIC_ID_RE = re.compile(r"^\d+$")
-
 
 def normalize_user_id(raw: object) -> str:
     """把用户 ID 规范化成用于内部识别的字符串。
@@ -201,12 +198,7 @@ def normalize_user_id(raw: object) -> str:
         str: 规范化后的 ID；输入为空时返回空串。
     """
 
-    text = str(raw or "").translate(_FULLWIDTH_MAP).strip()
-    if not text:
-        return ""
-    if _NUMERIC_ID_RE.match(text):
-        return text
-    return text
+    return str(raw or "").translate(_FULLWIDTH_MAP).strip()
 
 
 def _split_roster_segments(line: str) -> List[str]:
